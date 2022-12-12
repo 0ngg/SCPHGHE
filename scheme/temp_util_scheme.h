@@ -24,5 +24,27 @@ int is_neighbor(make<int>::vec v1, make<int>::vec v2)
         return -1;
     };
 };
+make<std::pair<std::string, int>>::vec is_boundary(int fid, make<make<make<int>::vec>::map_int>::map_str& fid_, make<std::string>::vec& reserve)
+{
+    make<std::pair<std::string, int>>::vec get = make<std::pair<std::string, int>>::vec();
+    for(std::pair<std::string, make<make<int>::vec>::map_int> entry1 : fid_)
+    {
+        if(std::find(reserve.begin(), reserve.end(), entry1.first) != reserve.end())
+        {
+            for(std::pair<int, make<int>::vec> entry2 : fid_[entry1.first])
+            {
+                for(auto i = entry2.second.begin(); i != entry2.second.end(); i++)
+                {
+                    if(*i == fid)
+                    {
+                        std::pair<std::string, int> temp(entry1.first, entry2.first);
+                        get.push_back(temp);
+                    };
+                };
+            };
+        };
+    };
+    return get;
+};
 };
 #endif

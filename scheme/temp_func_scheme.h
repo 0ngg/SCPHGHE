@@ -112,11 +112,12 @@ void make_cell(minfo& mesh_, cinfo& cell_, make<finfo>::map_int& faces_)
     cell_.ccentroid(centroid);
     cell_.cvolume = vol;
 };
-void minfo::make_id(mshio::MshSpec spec)
+void minfo::make_id(mshio::MshSpec spec, make<cinfo>::map_int& cells_)
 {
     // physical names to boundary and domain id
     make<make<make<int>::vec>::map_int>::map_str fid__;
     make<make<make<int>::vec>::map_str>::map_str cid__;
+    make<make<make<std::pair<std::string, int>>::vec>::map_int>::map_int bid__; // store cell-face-<boundary name, unique-constant/iter value>
     make<make<make<int>::vec&>::vec>::map_int it_id_tag;
     for(const auto& group : spec.physical_groups)
     {
@@ -216,14 +217,62 @@ void minfo::make_id(mshio::MshSpec spec)
         };
     };
     this->fid = fid__; this->cid = cid__;
+    // boundary id
+    make<std::pair<std::string, int>>::vec temp_pair;
+    make<std::string>::vec boundary_reserve{"ns", "in", "out", "temp", "fflux", "hamb"};
+    for(std::pair<std::string, make<int>::vec> entry_cell : cid__["fluid"])
+    {
+        for(auto i = entry_cell.second.begin(); i != entry_cell.second.end(); i++)
+        {
+            make<int>::vec& faces_ = cells_[*i].cface;
+            for(auto j = faces_.begin(); j != faces_.end(); j++)
+            {
+                temp_pair = is_boundary(*j, fid__, boundary_reserve);
+                if(temp_pair != make<std::pair<std::string, int>>::vec())
+                {
+                    make<make<make<std::pair<std::string, int>>::vec>::map_int>::map_int::iterator it_cell = bid__.find(*i);
+                    if(it_cell == bid__.end())
+                    {
+                        bid__.insert({*i, make<make<std::pair<std::string, int>>::vec>::map_int()});
+                    };
+                    bid__[*i].insert({*j, temp_pair});
+                };
+            };
+        };
+    };
+    make<make<make<int>::vec>::map_str>::map_str::iterator it_solid = cid__.find("solid");
+    if(it_solid != cid__.end())
+    {
+        make<std::string>::vec boundary_reserve{"temp", "sflux", "hamb"};
+        for(std::pair<std::string, make<int>::vec> entry_cell : cid__["solid"])
+        {
+            for(auto i = entry_cell.second.begin(); i != entry_cell.second.end(); i++)
+            {
+                make<int>::vec& faces_ = cells_[*i].cface;
+                for(auto j = faces_.begin(); j != faces_.end(); j++)
+                {
+                    temp_pair = is_boundary(*j, fid__, boundary_reserve);
+                    if(temp_pair != make<std::pair<std::string, int>>::vec())
+                    {
+                        make<make<make<std::pair<std::string, int>>::vec>::map_int>::map_int::iterator it_cell = bid__.find(*i);
+                        if(it_cell == bid__.end())
+                        {
+                            bid__.insert({*i, make<make<std::pair<std::string, int>>::vec>::map_int()});
+                        };
+                        bid__[*i].insert({*j, temp_pair});
+                    };
+                };
+            };
+        };
+    };
+    this->bid = bid__;
 };
 void minfo::make_template(make<coor>::map_int& nodes, make<finfo>::map_int& faces, make<cinfo>::map_int& cells)
 {
+    make<make<sparse_input>::vec>::map_str cc_fc_input;
     make<make<sparse_input>::vec>::map_str fc_input;
     make<make<sparse_input>::vec>::map_str cc_input;
-    make<make<sparse_input>::vec>::map_str cc_fc_input;
     // ids
-    make<make<make<int>::vec>::map_int>::map_str& fid_ = this->fid;
     make<make<make<int>::vec>::map_str>::map_str& cid_ = this->cid;
     // fluid
     cc_fc_input.insert({"fluid", make<sparse_input>::vec()});
@@ -670,7 +719,7 @@ void minfo::make_minfo(mshio::MshSpec spec)
             return;
         };
     };
-    this->make_id(spec);
+    this->make_id(spec, cells);
     this->make_template(nodes, faces, cells);
     this->make_size(nodes, faces, cells);
     this->make_geom(faces, cells);
