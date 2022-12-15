@@ -1,4 +1,3 @@
-#include"temp_util.h"
 #include"temp_util_linear.h"
 
 #ifdef LINEARCFD_H
@@ -8,7 +7,7 @@ class linear
 {
     public:
     cfdscheme::vinfo value;
-    make<make<double>::sp_mat>::map_str gamma;
+    make<make<make<double>::map_int>::map_str>::map_str gamma; // cc
     make<make<double>::sp_mat>::map_str lhs_cc;
     make<make<double>::sp_mat>::map_str lhs_fc;
     make<make<double>::sp_mat>::map_str rhs_cc;
@@ -16,24 +15,29 @@ class linear
     linear() {};
     private:
     virtual void make_linear();
-    virtual void calc_source();
-    virtual void calc_lhs_cc();
-    virtual void calc_lhs_fc();
-    virtual void calc_rhs_cc();
-    virtual void calc_rhs_fc();
+    virtual void update_linear();
+    virtual void update_correction();
+    virtual void update_prop();
+    virtual void update_source();
+    virtual void update_wall();
+    virtual void calc_gamma();
     virtual void calc_wall();
+    virtual void calc_lhs();
+    virtual void calc_rhs();
+    virtual void calc_bound_lhs();
+    virtual void calc_bound_rhs();
 };
 class pcorrect : public linear
 {
     public:
     pcorrect() {};
     private:
-    void make_linear(cfdscheme::scheme&);
-    void calc_source(cfdscheme::scheme&);
-    void calc_lhs_cc(cfdscheme::scheme&);
-    void calc_lhs_fc(cfdscheme::scheme&);
-    void calc_rhs_cc(cfdscheme::scheme&);
-    void calc_rhs_fc(cfdscheme::scheme&);
+    void make_linear(cfdscheme::scheme& const);
+    void update_linear();
+    void update_correction(cfdscheme::scheme& const, momentum& const, momentum& const, momentum& const);
+    void calc_lhs(cfdscheme::scheme& const, momentum& const, momentum& const, momentum& const);
+    void calc_rhs(cfdscheme::scheme& const, momentum& const, momentum& const, momentum& const);
+    void calc_bound_lhs(int, int, std::string, int, cfdscheme::scheme& const, double);
 };
 class momentum : public linear
 {
@@ -41,57 +45,69 @@ class momentum : public linear
     int axis;
     momentum() {};
     private:
-    void make_linear(cfdscheme::scheme&);
-    void calc_source(cfdscheme::scheme&);
-    void calc_lhs_cc(cfdscheme::scheme&);
-    void calc_lhs_fc(cfdscheme::scheme&);
-    void calc_rhs_cc(cfdscheme::scheme&);
-    void calc_rhs_fc(cfdscheme::scheme&);
-    void calc_wall(cfdscheme::scheme&);
-};
-class energy : public linear
-{
-    energy() {};
-    private:
-    void make_linear(cfdscheme::scheme&);
-    void calc_source(cfdscheme::scheme&);
-    void calc_lhs_cc(cfdscheme::scheme&);
-    void calc_lhs_fc(cfdscheme::scheme&);
-    void calc_rhs_cc(cfdscheme::scheme&);
-    void calc_rhs_fc(cfdscheme::scheme&);
-    void calc_wall(cfdscheme::scheme&);
+    void make_linear(cfdscheme::scheme& const, int);
+    void update_linear();
+    void update_wall(cfdscheme::scheme& const);
+    void calc_gamma(cfdscheme::scheme& const);
+    void calc_wall(cfdscheme::scheme&, momentum& const, momentum& const);
+    void calc_lhs(cfdscheme::scheme& const, momentum& const, momentum& const);
+    void calc_rhs(cfdscheme::scheme& const, turb_k& const, momentum& const, momentum& const);
+    void calc_bound_lhs(int, int, std::string, int, cfdscheme::scheme& const, momentum& const, momentum& const);
+    void calc_bound_rhs(int, int, std::string, int, cfdscheme::scheme& const, momentum& const, momentum& const);
 };
 class turb_k : public linear
 {
     turb_k() {};
     private:
-    void make_linear(cfdscheme::scheme&);
-    void calc_source(cfdscheme::scheme&);
-    void calc_lhs_cc(cfdscheme::scheme&);
-    void calc_lhs_fc(cfdscheme::scheme&);
-    void calc_rhs_cc(cfdscheme::scheme&);
-    void calc_rhs_fc(cfdscheme::scheme&);
-    void calc_wall(cfdscheme::scheme&);
+    void make_linear(cfdscheme::scheme& const);
+    void update_linear();
+    void update_wall(cfdscheme::scheme& const);
+    void calc_gamma(cfdscheme::scheme& const);
+    void calc_wall(cfdscheme::scheme& const, turb_e& const);
+    void calc_lhs(cfdscheme::scheme& const, momentum& const, momentum& const, momentum& const);
+    void calc_rhs(cfdscheme::scheme& const, turb_e& const, momentum& const, momentum& const, momentum& const);
+    void calc_bound_lhs(int, int, std::string, int, cfdscheme::scheme& const, momentum& const, momentum& const, momentum& const);
+    void calc_bound_rhs(int, int, std::string, int, cfdscheme::scheme& const, momentum& const, momentum& const, momentum& const);
 };
 class turb_e : public linear
 {
     turb_e() {};
     private:
-    void make_linear(cfdscheme::scheme&);
-    void calc_source(cfdscheme::scheme&);
-    void calc_lhs_cc(cfdscheme::scheme&);
-    void calc_lhs_fc(cfdscheme::scheme&);
-    void calc_rhs_cc(cfdscheme::scheme&);
-    void calc_rhs_fc(cfdscheme::scheme&);
-    void calc_wall(cfdscheme::scheme&);
+    void make_linear(cfdscheme::scheme& const);
+    void update_linear();
+    void update_wall(cfdscheme::scheme& const);
+    void calc_gamma(cfdscheme::scheme& const);
+    void calc_wall(cfdscheme::scheme& const);
+    void calc_lhs(cfdscheme::scheme& const, momentum& const, momentum& const, momentum& const);
+    void calc_rhs(cfdscheme::scheme& const, turb_k& const, momentum& const, momentum& const, momentum& const);
+    void calc_bound_lhs(int, int, std::string, int, cfdscheme::scheme& const, momentum& const, momentum& const, momentum& const);
+    void calc_bound_rhs(int, int, std::string, int, cfdscheme::scheme& const, momentum& const, momentum& const, momentum& const);
+};
+class energy : public linear
+{
+    energy() {};
+    private:
+    // commons
+    void make_linear(cfdscheme::scheme& const);
+    void update_linear();
+    void update_prop();
+    void update_wall(cfdscheme::scheme& const);
+    void calc_gamma(cfdscheme::scheme& const);
+    void calc_wall(cfdscheme::scheme& const);
+    void calc_lhs(cfdscheme::scheme& const, momentum& const, momentum& const, momentum& const);
+    void calc_rhs(cfdscheme::scheme& const, momentum& const, momentum& const, momentum& const);    
+    void calc_bound_lhs(int, int, std::string, int, cfdscheme::scheme& const, std::string, momentum& const, momentum& const, momentum& const);
+    void calc_bound_rhs(int, int, std::string, int, cfdscheme::scheme& const, std::string, momentum& const, momentum& const, momentum& const);
 };
 class s2s : public linear
 {
     s2s() {};
     private:
-    void make_linear(cfdscheme::scheme&);
-    void calc_lhs_cc(cfdscheme::scheme&);
-    void calc_rhs_cc(cfdscheme::scheme&);
+    void make_linear(cfdscheme::scheme& const);
+    void update_linear();
+    void update_source();
+    void calc_lhs(cfdscheme::scheme& const);
+    void calc_rhs(cfdscheme::scheme& const, energy& const);
 };
 };
 #endif
