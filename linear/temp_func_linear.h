@@ -1,4 +1,5 @@
 #include"temp_struct_linear.h"
+#include"temp_func_solver.h"
 
 #ifdef LINEARCFD_H
 namespace cfdlinear
@@ -38,57 +39,57 @@ void s2s::make_linear(cfdscheme::scheme& const scheme_ref)
     append_template(make<std::string>::vec{"s2s"}, this, scheme_ref);
 };
 // update_linear
-/*
 void pcorrect::update_linear(cfdscheme::scheme& const scheme_ref, momentum& const u_ref, momentum& const v_ref, momentum& const w_ref)
 {
     this->calc_lhs(scheme_ref, u_ref, v_ref, w_ref);
     this->calc_rhs(scheme_ref, u_ref, v_ref, w_ref);
     //solve
-    this->update_correction();
+    this->update_correction(scheme_ref, u_ref, v_ref, w_ref);
 };
-void momentum::update_linear()
+void momentum::update_linear(cfdscheme::scheme& const scheme_ref, turb_k& const k_ref, momentum& const v1_ref, momentum& const v2_ref)
 {
-    this->calc_gamma();
-    this->calc_lhs();
-    this->calc_rhs();
+    this->calc_gamma(scheme_ref);
+    this->calc_lhs(scheme_ref, v1_ref, v2_ref);
+    this->calc_rhs(scheme_ref, k_ref, v1_ref, v2_ref);
     //solve
-    this->calc_wall();
-    this->update_wall();
+    this->calc_wall(scheme_ref, v1_ref, v2_ref);
 };
-void turb_k::update_linear()
+void turb_k::update_linear(cfdscheme::scheme& const scheme_ref, turb_e& const e_ref, momentum& const u_ref,
+                           momentum& const v_ref, momentum& const w_ref)
 {
-    this->calc_gamma();
-    this->calc_lhs();
-    this->calc_rhs();
+    this->calc_gamma(scheme_ref);
+    this->calc_lhs(scheme_ref, u_ref, v_ref, w_ref);
+    this->calc_rhs(scheme_ref, e_ref, u_ref, v_ref, w_ref);
     //solve
-    this->calc_wall();
-    this->update_wall();
+    this->calc_wall(scheme_ref, e_ref);
 };
-void turb_e::update_linear()
+void turb_e::update_linear(cfdscheme::scheme& const scheme_ref, turb_k& const k_ref, momentum& const u_ref, momentum& const v_ref, momentum& const w_ref)
 {
-    this->calc_gamma();
-    this->calc_lhs();
-    this->calc_rhs();
+    this->calc_gamma(scheme_ref);
+    this->calc_lhs(scheme_ref, u_ref, v_ref, w_ref);
+    this->calc_rhs(scheme_ref, k_ref, u_ref, v_ref, w_ref);
     //solve
-    this->calc_wall();
-    this->update_wall();
+    this->calc_wall(scheme_ref);
 };
-void energy::update_linear()
+void energy::update_linear(cfdscheme::scheme& const scheme_ref, momentum& const u_ref, momentum& const v_ref, momentum& const w_ref)
 {
-    this->calc_gamma();
-    this->calc_lhs();
-    this->calc_rhs();
+    this->calc_gamma(scheme_ref);
+    this->calc_lhs(scheme_ref, u_ref, v_ref, w_ref);
+    this->calc_rhs(scheme_ref, u_ref, v_ref, w_ref);
     //solve
-    this->update_prop();
+    this->calc_wall(scheme_ref);
 };
-void s2s::update_linear()
+void s2s::update_linear(cfdscheme::scheme& const scheme_ref, energy& const energy_ref)
 {
-    this->calc_lhs();
-    this->calc_rhs();
+    this->calc_lhs(scheme_ref);
+    this->calc_rhs(scheme_ref, energy_ref);
     //solve
-    this->update_source();
+    //update source
+    for(std::pair<int, double> entry : this->value.cvalue["s2s"])
+    {
+        scheme_ref.source.value["s2s"][entry.first] = entry.second;
+    };
 };
-*/
 // update_correcttion
 void pcorrect::update_correction(cfdscheme::scheme& const scheme_ref, momentum& const u_ref, momentum& const v_ref, momentum& w_ref)
 {
@@ -133,34 +134,6 @@ void pcorrect::update_correction(cfdscheme::scheme& const scheme_ref, momentum& 
         w_ref.value.cvalue["fluid"][row] += (-1) * rho_c_[row] * w_DC__ * pcorrect_cgrad__(2);
         scheme_ref.pressure.cvalue["fluid"][row] += this->value.cvalue["fluid"][row];
     };
-};
-// update_prop
-void energy::update_prop()
-{
-
-};
-// update_source
-void s2s::update_source()
-{
-    // s2s only
-};
-// update_wall
-void momentum::update_wall(cfdscheme::scheme& const scheme_ref)
-{
-    // utau, ts -> miut
-    
-};
-void turb_k::update_wall(cfdscheme::scheme& const scheme_ref)
-{
-    // ts -> miut
-};
-void turb_e::update_wall(cfdscheme::scheme& const scheme_ref)
-{
-    // ts -> miut
-};
-void energy::update_wall(cfdscheme::scheme& const scheme_ref)
-{
-    // ts -> miut
 };
 //coef calc
 //pcorrect
@@ -342,7 +315,7 @@ void momentum::calc_wall(cfdscheme::scheme& const scheme_ref, momentum& const v1
         v__(v1_ref.axis) = v1_ref.value.cvalue["fluid"][*i];
         v__(v2_ref.axis) = v2_ref.value.cvalue["fluid"][*i];
         v_norm__ = v__ / v__.norm();
-        wall_perp__ = scheme_ref.wall.parallel[*i];
+        wall_perp__ = scheme_ref.wall.wall_parallel[*i];
         v_cross__ = v_norm__.cross(wall_perp__);
         wall_parallel__ = wall_perp__.cross(v_cross__);
         wall_parallel__ = wall_parallel__ / wall_parallel__.norm();
@@ -819,7 +792,7 @@ void turb_k::calc_bound_rhs(int row, int col, std::string check, int unique, cfd
         axes& dCf_ = scheme_ref.mesh.geom["dCf"]["fluid"];
         coor Sf__ = Sf_.axes_to_coor(row, col);
         coor dCf__ = dCf_.axes_to_coor(row, col);
-        coor vf__ = (-1) * Sf__ * scheme_ref.source.value[check][unique];
+        coor vf__ = (-1) * scheme_ref.source.value[check][unique] * Sf__;
         double inlet_k = 1/2 * 0.01 * (vf__.dot(vf__));
         this->rhs_fc["fluid"].coeffRef(row, col) = (-1) * this->gamma["face"]["fluid"][col] * Sf__.norm() * inlet_k / dCf__.norm();
     }
@@ -1084,7 +1057,7 @@ void turb_e::calc_bound_rhs(int row, int col, std::string check, int unique, cfd
         axes& dCf_ = scheme_ref.mesh.geom["dCf"]["fluid"];
         coor Sf__ = Sf_.axes_to_coor(row, col);
         coor dCf__ = dCf_.axes_to_coor(row, col);
-        coor vf__ = (-1) * Sf__ * scheme_ref.source.value[check][unique];
+        coor vf__ = (-1) * scheme_ref.source.value[check][unique] * Sf__;
         make<double>::map_int& rho_f_ = scheme_ref.prop.rho["face"];
         make<double>::map_int& miu_f_ = scheme_ref.prop.miu["face"];
         make<double>::map_int& miut_ = scheme_ref.wall.miut;
@@ -1484,11 +1457,11 @@ void energy::calc_bound_lhs(int row, int col, std::string check, int unique, cfd
         double h_sky__ = 5.67 * pow(10, -8) * eps_C__ * (T_f__ + T_sky__) * (pow(T_f__, 2) + pow(T_sky__, 2)) * (T_f__ - T_sky__) / (T_f__ - T_amb__);
         // h_free_conv
         double T_film__ = (T_f__ + T_amb__) / 2;
-        double miu_film__ = calc_fluid_prop("miu", T_film__, 1.01325);
-        double rho_film__ = calc_fluid_prop("rho", T_film__, 1.01325);
+        double miu_film__ = cfdsolver::calc_fluid_prop("miu", T_film__, 1.01325);
+        double rho_film__ = cfdsolver::calc_fluid_prop("rho", T_film__, 1.01325);
         double viu_film__ = miu_film__ / rho_film__;
-        double k_film__ = calc_fluid_prop("k", T_film__, 1.01325);
-        double alpha_film__ = calc_fluid_prop("alpha", T_film__, 1.01325);
+        double k_film__ = cfdsolver::calc_fluid_prop("k", T_film__, 1.01325);
+        double alpha_film__ = cfdsolver::calc_fluid_prop("alpha", T_film__, 1.01325);
         double charl__ = pow(scheme_ref.mesh.size["area"][col], 0.5);
         double Ral__ = 9.81 * (T_f__ - T_amb__) * pow(charl__, 3) / (T_film__ * viu_film__ * alpha_film__);
         double NuN__ = 0.0;
@@ -1566,11 +1539,11 @@ void energy::calc_bound_rhs(int row, int col, std::string check, int unique, cfd
         double h_sky__ = 5.67 * pow(10, -8) * eps_C__ * (T_f__ + T_sky__) * (pow(T_f__, 2) + pow(T_sky__, 2)) * (T_f__ - T_sky__) / (T_f__ - T_amb__);
         // h_free_conv
         double T_film__ = (T_f__ + T_amb__) / 2;
-        double miu_film__ = calc_fluid_prop("miu", T_film__, 1.01325);
-        double rho_film__ = calc_fluid_prop("rho", T_film__, 1.01325);
+        double miu_film__ = cfdsolver::calc_fluid_prop("miu", T_film__, 1.01325);
+        double rho_film__ = cfdsolver::calc_fluid_prop("rho", T_film__, 1.01325);
         double viu_film__ = miu_film__ / rho_film__;
-        double k_film__ = calc_fluid_prop("k", T_film__, 1.01325);
-        double alpha_film__ = calc_fluid_prop("alpha", T_film__, 1.01325);
+        double k_film__ = cfdsolver::calc_fluid_prop("k", T_film__, 1.01325);
+        double alpha_film__ = cfdsolver::calc_fluid_prop("alpha", T_film__, 1.01325);
         double charl__ = pow(scheme_ref.mesh.size["area"][col], 0.5);
         double Ral__ = 9.81 * (T_f__ - T_amb__) * pow(charl__, 3) / (T_film__ * viu_film__ * alpha_film__);
         double NuN__ = 0.0;

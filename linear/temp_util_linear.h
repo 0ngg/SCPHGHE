@@ -38,31 +38,5 @@ void append_template(make<std::string>::vec which, V* eq, cfdscheme::scheme& sch
         eq->gamma = gamma_; eq->lhs_fc = lhs_fc_; eq->rhs_fc = rhs_fc_;
     };
 };
-template <class V>
-V linear_face(V valC__, V valF__, double gc__, bool is_gamma)
-{
-    if(is_gamma)
-    {
-        return (gc__ * valF__ + (1 - gc__) * valC__) / (valC__ * valF__);
-    }
-    else
-    {
-        return gc__ * valC__ + (1 - gc__) * valF__;
-    };
-};
-/*
-double quick_face()
-{
-
-};
-coor quick_grad()
-{
-    
-};
-*/
-double calc_fluid_prop(std::string what, double P, double T)
-{
-
-};
 };
 #endif

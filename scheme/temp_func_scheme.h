@@ -117,7 +117,7 @@ void minfo::make_id(mshio::MshSpec spec, make<cinfo>::map_int& cells_)
     // physical names to boundary and domain id
     make<make<make<int>::vec>::map_int>::map_str fid__;
     make<make<make<int>::vec>::map_str>::map_str cid__;
-    make<make<make<std::pair<std::string, int>>::vec>::map_int>::map_int bid__; // store cell-face-<boundary name, unique-constant/iter value>
+    make<make<make<make<std::pair<std::string, int>>::vec>::map_int>::map_int>::map_str bid__; // store cell-face-<boundary name, unique-constant/iter value>
     make<make<make<int>::vec&>::vec>::map_int it_id_tag;
     for(const auto& group : spec.physical_groups)
     {
@@ -220,6 +220,7 @@ void minfo::make_id(mshio::MshSpec spec, make<cinfo>::map_int& cells_)
     // boundary id
     make<std::pair<std::string, int>>::vec temp_pair;
     make<std::string>::vec boundary_reserve{"ns", "in", "out", "temp", "fflux", "hamb"};
+    bid__.insert({"fluid", make<make<make<std::pair<std::string, int>>::vec>::map_int>::map_int()});
     for(std::pair<std::string, make<int>::vec> entry_cell : cid__["fluid"])
     {
         for(auto i = entry_cell.second.begin(); i != entry_cell.second.end(); i++)
@@ -230,12 +231,12 @@ void minfo::make_id(mshio::MshSpec spec, make<cinfo>::map_int& cells_)
                 temp_pair = is_boundary(*j, fid__, boundary_reserve);
                 if(temp_pair != make<std::pair<std::string, int>>::vec())
                 {
-                    make<make<make<std::pair<std::string, int>>::vec>::map_int>::map_int::iterator it_cell = bid__.find(*i);
-                    if(it_cell == bid__.end())
+                    make<make<make<std::pair<std::string, int>>::vec>::map_int>::map_int::iterator it_cell = bid__["fluid"].find(*i);
+                    if(it_cell == bid__["fluid"].end())
                     {
-                        bid__.insert({*i, make<make<std::pair<std::string, int>>::vec>::map_int()});
+                        bid__["fluid"].insert({*i, make<make<std::pair<std::string, int>>::vec>::map_int()});
                     };
-                    bid__[*i].insert({*j, temp_pair});
+                    bid__["fluid"][*i].insert({*j, temp_pair});
                 };
             };
         };
@@ -243,6 +244,7 @@ void minfo::make_id(mshio::MshSpec spec, make<cinfo>::map_int& cells_)
     make<make<make<int>::vec>::map_str>::map_str::iterator it_solid = cid__.find("solid");
     if(it_solid != cid__.end())
     {
+        bid__.insert({"solid", make<make<make<std::pair<std::string, int>>::vec>::map_int>::map_int()});
         make<std::string>::vec boundary_reserve{"temp", "sflux", "hamb"};
         for(std::pair<std::string, make<int>::vec> entry_cell : cid__["solid"])
         {
@@ -254,12 +256,12 @@ void minfo::make_id(mshio::MshSpec spec, make<cinfo>::map_int& cells_)
                     temp_pair = is_boundary(*j, fid__, boundary_reserve);
                     if(temp_pair != make<std::pair<std::string, int>>::vec())
                     {
-                        make<make<make<std::pair<std::string, int>>::vec>::map_int>::map_int::iterator it_cell = bid__.find(*i);
-                        if(it_cell == bid__.end())
+                        make<make<make<std::pair<std::string, int>>::vec>::map_int>::map_int::iterator it_cell = bid__["solid"].find(*i);
+                        if(it_cell == bid__["solid"].end())
                         {
-                            bid__.insert({*i, make<make<std::pair<std::string, int>>::vec>::map_int()});
+                            bid__["solid"].insert({*i, make<make<std::pair<std::string, int>>::vec>::map_int()});
                         };
-                        bid__[*i].insert({*j, temp_pair});
+                        bid__["solid"][*i].insert({*j, temp_pair});
                     };
                 };
             };
@@ -443,15 +445,15 @@ void minfo::make_size(make<coor>::map_int& nodes, make<finfo>::map_int& faces, m
         cinfo& cell_ = entry.second;
         make_cell(mesh_, cell_, faces);
     };
-    make<make<double>::vec>::map_str size__;
-    size__.insert({"area", make<double>::vec()}); size__.insert({"volume", make<double>::vec()});
+    make<make<double>::map_int>::map_str size__;
+    size__.insert({"area", make<double>::map_int()}); size__.insert({"volume", make<double>::map_int()});
     for(std::pair<int, finfo> entry : faces)
     {
-        size__["area"].push_back(entry.second.farea);
+        size__["area"].insert({entry.first, entry.second.farea});
     };
     for(std::pair<int, cinfo> entry : cells)
     {
-        size__["volume"].push_back(entry.second.cvolume);
+        size__["volume"].insert({entry.first, entry.second.cvolume});
     };
     this->size = size__;
 };
@@ -739,19 +741,16 @@ void pinfo::make_pinfo(minfo& mesh_)
     {
         if(entry_cid.first.compare("fluid") == 0)
         {
-            make<make<double>::map_int>::map_str rho_;
-            make<make<double>::map_int>::map_str miu_;
-            make<make<double>::map_int>::map_str cp_;
+            make<double>::map_int rho_;
+            make<double>::map_int miu_;
+            make<double>::map_int cp_;
             for(std::pair<std::string, make<int>::vec> entry_fluid : entry_cid.second)
             {
-                rho_.insert({entry_fluid.first, make<double>::map_int()});
-                miu_.insert({entry_fluid.first, make<double>::map_int()});
-                cp_.insert({entry_fluid.first, make<double>::map_int()});
                 for(auto i = entry_fluid.second.begin(); i != entry_fluid.second.end(); i++)
                 {
-                    rho_[entry_fluid.first].insert({*i, 0.0});
-                    miu_[entry_fluid.first].insert({*i, 0.0});
-                    cp_[entry_fluid.first].insert({*i, 0.0});
+                    rho_.insert({*i, 0.0});
+                    miu_.insert({*i, 0.0});
+                    cp_.insert({*i, 0.0});
                 };
             };
             this->rho = rho_;
@@ -760,13 +759,12 @@ void pinfo::make_pinfo(minfo& mesh_)
         }
         else if(entry_cid.first.compare("solid") == 0)
         {
-            make<make<double>::map_int>::map_str k_;
+            make<double>::map_int k_;
             for(std::pair<std::string, make<int>::vec> entry_solid : entry_cid.second)
             {
-                k_.insert({entry_solid.first, make<double>::map_int()});
                 for(auto i = entry_solid.second.begin(); i != entry_solid.second.end(); i++)
                 {
-                    k_[entry_solid.first].insert({*i, 0.0});
+                    k_.insert({*i, 0.0});
                 };
             };
             this->k = k_;
@@ -812,25 +810,37 @@ void winfo::make_winfo(minfo& mesh_)
 // vinfo
 void vinfo::make_vinfo(make<std::string>::vec which, minfo& mesh_)
 {
-    make<make<double>::map_int>::map_str value_;
-    make<make<double>::map_int>::map_str prev_value_;
-    make<make<coor>::map_int>::map_str grad_;
-    make<make<coor>::map_int>::map_str prev_grad_;
+    make<make<double>::map_int>::map_str cvalue_;
+    make<make<double>::map_int>::map_str fvalue_;
+    make<make<double>::map_int>::map_str prev_cvalue_;
+    make<make<double>::map_int>::map_str prev_fvalue_;
+    make<make<coor>::map_int>::map_str cgrad_;
+    make<make<coor>::map_int>::map_str fgrad_;
+    make<make<coor>::map_int>::map_str prev_cgrad_;
+    make<make<coor>::map_int>::map_str prev_fgrad_;
     for(auto i = which.begin(); i != which.end(); i++)
     {
         make<double>::sp_mat& cc_ = mesh_.cc[*i];
-        value_.insert({*i, make<double>::map_int()});
-        grad_.insert({*i, make<coor>::map_int()});
+        cvalue_.insert({*i, make<double>::map_int()});
+        cgrad_.insert({*i, make<coor>::map_int()});
         for(int j = 0; j < cc_.rows(); j++)
         {
-            value_[*i].insert({j, 0.0});
-            grad_[*i].insert({j, coor(0.0, 0.0, 0.0)});
+            cvalue_[*i].insert({j, 0.0});
+            cgrad_[*i].insert({j, coor(0.0, 0.0, 0.0)});
+        };
+        make<double>::sp_mat& fc_ = mesh_.fc[*i];
+        fvalue_.insert({*i, make<double>::map_int()});
+        fgrad_.insert({*i, make<coor>::map_int()});
+        for(int j = 0; j < fc_.cols(); j++)
+        {
+            fvalue_[*i].insert({j, 0.0});
+            fgrad_[*i].insert({j, coor(0.0, 0.0, 0.0)});
         };
     };
-    this->value = value_;
-    this->prev_value = value_;
-    this->grad = grad_;
-    this->prev_grad = grad_;
+    this->cvalue = cvalue_; this->prev_cvalue = cvalue_;
+    this->fvalue = fvalue_; this->prev_fvalue = fvalue_;
+    this->cgrad = cgrad_; this->prev_cgrad = cgrad_;
+    this->fgrad = fgrad_; this->prev_fgrad = fgrad_;
 };
 };
 #endif

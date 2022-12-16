@@ -23,10 +23,10 @@ class minfo
 {  
     public:
     make<make<axes>::map_str>::map_str geom; // Sf, Ef, Tf, eCf, eCF, dCf, dCF, parallel = -Sf.norm() from fluid perspective
-    make<make<double>::vec>::map_str size; // area, volume
+    make<make<double>::map_int>::map_str size; // area, volume
     make<make<make<int>::vec>::map_int>::map_str fid; // store common (ns, inlet, outlet, conj) index 0, temp, flux, and s2s index unique id
     make<make<make<int>::vec>::map_str>::map_str cid; // store domain name unique id (derived from fluid/solid)
-    make<make<make<std::pair<std::string, int>>::vec>::map_int>::map_int bid; // store cell-face-<boundary name, unique-constant/iter value>
+    make<make<make<make<std::pair<std::string, int>>::vec>::map_int>::map_int>::map_str bid; // store cell-face-<boundary name, unique-constant/iter value>
     make<make<int>::sp_mat>::map_str cc_fc; // store neighbor cell to face alias id;
     make<make<double>::sp_mat>::map_str fc; // store face-cell sp_mat templates for fluid, solid, and conj (energy use)
     make<make<double>::sp_mat>::map_str cc; // store cell-cell sp_mat templates for fluid, solid, conj, and s2s (energy use)
@@ -48,12 +48,12 @@ class minfo
 class pinfo
 {
     public:
-    make<make<double>::map_int>::map_str rho; // cell, fluid
-    make<make<double>::map_int>::map_str miu; // cell, fluid 
-    make<make<double>::map_int>::map_str cp; // cell, fluid
-    make<make<double>::map_int>::map_str k; // cell, solid
-    make<double>::map_int eps; // cell, s2s
-    make<double>::map_int alpha; // cell, s2s
+    make<make<double>::map_int>::map_str rho; // cell-face, fluid
+    make<make<double>::map_int>::map_str miu; // cell-face, fluid 
+    make<make<double>::map_int>::map_str cp; // cell-face, fluid
+    make<make<double>::map_int>::map_str k; // cell-face, solid -> constant
+    make<make<double>::map_int>::map_str eps; // face, fluid(s2s) -> constant
+    make<make<double>::map_int>::map_str alpha; // cell, fluid -> constant
     pinfo() {};
     pinfo(minfo& mesh_)
     {
@@ -65,6 +65,8 @@ class pinfo
 class winfo
 {
     public:
+    make<double>::map_int wall_dist; // dCf wall
+    make<coor>::map_int wall_parallel; // cell parallel transformator
     make<double>::map_int ts; // cell, fluid
     make<double>::map_int utau; // cell, fluid
     make<double>::map_int miut; // cell, fluid
@@ -78,10 +80,14 @@ class winfo
 };
 struct vinfo
 {
-    make<make<double>::map_int>::map_str value; // cc
-    make<make<double>::map_int>::map_str prev_value; // cc
-    make<make<coor>::map_int>::map_str grad; // cc
-    make<make<coor>::map_int>::map_str prev_grad; // cc
+    make<make<double>::map_int>::map_str cvalue;
+    make<make<double>::map_int>::map_str fvalue;
+    make<make<double>::map_int>::map_str prev_cvalue;
+    make<make<double>::map_int>::map_str prev_fvalue;
+    make<make<coor>::map_int>::map_str cgrad;
+    make<make<coor>::map_int>::map_str fgrad;
+    make<make<coor>::map_int>::map_str prev_cgrad;
+    make<make<coor>::map_int>::map_str prev_fgrad;
     vinfo() {};
     vinfo(make<std::string>::vec which, minfo& mesh_)
     {
@@ -97,7 +103,7 @@ struct binfo
     /*energy*/
     // isotemp(temp) value (unique), environment/ambient temperature
     // isoflux(flux) value (unique), environment irr q
-    // s2s(s2s) value (unique), s2s irr q from solver
+    // s2s(flux) value (unique), s2s solver q
     // hamb(hamb) value, ambient temperature
     make<make<double>::map_int>::map_str value; // boundary name-unique-constant/iter value
     binfo() {};
@@ -111,6 +117,8 @@ class scheme
     winfo wall;
     vinfo pressure;
     binfo source;
+    make<double>::sp_mat rho_v_sf; // fluid, fc
+    make<double>::map_int phi_v; // fluid, f
     scheme() {};
     scheme(std::string msh_file)
     {
