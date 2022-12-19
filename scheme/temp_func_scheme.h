@@ -753,9 +753,9 @@ void pinfo::make_pinfo(minfo& mesh_)
                     cp_.insert({*i, 0.0});
                 };
             };
-            this->rho = rho_;
-            this->miu = miu_;
-            this->cp = cp_;
+            this->rho["fluid"] = rho_;
+            this->miu["fluid"] = miu_;
+            this->cp["fluid"] = cp_;
         }
         else if(entry_cid.first.compare("solid") == 0)
         {
@@ -767,7 +767,7 @@ void pinfo::make_pinfo(minfo& mesh_)
                     k_.insert({*i, 0.0});
                 };
             };
-            this->k = k_;
+            this->k["solid"] = k_;
         };
     };
     make<make<double>::sp_mat>::map_str::iterator it_s2s = cc_.find("s2s");
@@ -780,8 +780,8 @@ void pinfo::make_pinfo(minfo& mesh_)
             eps_.insert({i, 0.0});
             alpha_.insert({i, 0.0});
         };
-        this->eps = eps_;
-        this->alpha = alpha_;
+        this->eps["fluid"] = eps_;
+        this->alpha["fluid"] = alpha_;
     };
 };
 // winfo

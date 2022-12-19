@@ -44,51 +44,45 @@ void pcorrect::update_linear(cfdscheme::scheme& const scheme_ref, momentum& cons
     this->calc_lhs(scheme_ref, u_ref, v_ref, w_ref);
     this->calc_rhs(scheme_ref, u_ref, v_ref, w_ref);
     //solve
-    this->update_correction(scheme_ref, u_ref, v_ref, w_ref);
 };
 void momentum::update_linear(cfdscheme::scheme& const scheme_ref, turb_k& const k_ref, momentum& const v1_ref, momentum& const v2_ref)
 {
+    this->calc_wall(scheme_ref, v1_ref, v2_ref);
     this->calc_gamma(scheme_ref);
     this->calc_lhs(scheme_ref, v1_ref, v2_ref);
     this->calc_rhs(scheme_ref, k_ref, v1_ref, v2_ref);
     //solve
-    this->calc_wall(scheme_ref, v1_ref, v2_ref);
 };
 void turb_k::update_linear(cfdscheme::scheme& const scheme_ref, turb_e& const e_ref, momentum& const u_ref,
                            momentum& const v_ref, momentum& const w_ref)
 {
+    this->calc_wall(scheme_ref, e_ref);
     this->calc_gamma(scheme_ref);
     this->calc_lhs(scheme_ref, u_ref, v_ref, w_ref);
     this->calc_rhs(scheme_ref, e_ref, u_ref, v_ref, w_ref);
     //solve
-    this->calc_wall(scheme_ref, e_ref);
 };
 void turb_e::update_linear(cfdscheme::scheme& const scheme_ref, turb_k& const k_ref, momentum& const u_ref, momentum& const v_ref, momentum& const w_ref)
 {
+    this->calc_wall(scheme_ref);
     this->calc_gamma(scheme_ref);
     this->calc_lhs(scheme_ref, u_ref, v_ref, w_ref);
     this->calc_rhs(scheme_ref, k_ref, u_ref, v_ref, w_ref);
     //solve
-    this->calc_wall(scheme_ref);
 };
 void energy::update_linear(cfdscheme::scheme& const scheme_ref, momentum& const u_ref, momentum& const v_ref, momentum& const w_ref)
 {
+    this->calc_wall(scheme_ref);
     this->calc_gamma(scheme_ref);
     this->calc_lhs(scheme_ref, u_ref, v_ref, w_ref);
     this->calc_rhs(scheme_ref, u_ref, v_ref, w_ref);
     //solve
-    this->calc_wall(scheme_ref);
 };
 void s2s::update_linear(cfdscheme::scheme& const scheme_ref, energy& const energy_ref)
 {
     this->calc_lhs(scheme_ref);
     this->calc_rhs(scheme_ref, energy_ref);
     //solve
-    //update source
-    for(std::pair<int, double> entry : this->value.cvalue["s2s"])
-    {
-        scheme_ref.source.value["s2s"][entry.first] = entry.second;
-    };
 };
 // update_correcttion
 void pcorrect::update_correction(cfdscheme::scheme& const scheme_ref, momentum& const u_ref, momentum& const v_ref, momentum& w_ref)
@@ -133,6 +127,13 @@ void pcorrect::update_correction(cfdscheme::scheme& const scheme_ref, momentum& 
         v_ref.value.cvalue["fluid"][row] += (-1) * rho_c_[row] * v_DC__ * pcorrect_cgrad__(1);
         w_ref.value.cvalue["fluid"][row] += (-1) * rho_c_[row] * w_DC__ * pcorrect_cgrad__(2);
         scheme_ref.pressure.cvalue["fluid"][row] += this->value.cvalue["fluid"][row];
+    };
+};
+void s2s::update_source_s2s(cfdscheme::scheme& const scheme_ref)
+{
+    for(std::pair<int, double> entry : this->value.cvalue["s2s"])
+    {
+        scheme_ref.source.face_value["s2s"][entry.first] = entry.second;
     };
 };
 //coef calc
@@ -540,7 +541,7 @@ void momentum::calc_bound_rhs(int row, int col, std::string check, int unique, c
         axes& eCf_ = scheme_ref.mesh.geom["eCf"]["fluid"];
         coor Sf__ = Sf_.axes_to_coor(row, col);
         coor eCf__ = (-1) * eCf_.axes_to_coor(row, col);
-        coor rho_v_sf__ = scheme_ref.source.value[check][unique] * eCf__;
+        coor rho_v_sf__ = scheme_ref.source.face_value[check][unique] * eCf__;
         this->rhs_fc["fluid"].coeffRef(row, col) = scheme_ref.prop.rho["face"][col] * rho_v_sf__.dot(Sf__); 
     }
     else if(check.compare("out") == 0)
@@ -792,7 +793,7 @@ void turb_k::calc_bound_rhs(int row, int col, std::string check, int unique, cfd
         axes& dCf_ = scheme_ref.mesh.geom["dCf"]["fluid"];
         coor Sf__ = Sf_.axes_to_coor(row, col);
         coor dCf__ = dCf_.axes_to_coor(row, col);
-        coor vf__ = (-1) * scheme_ref.source.value[check][unique] * Sf__;
+        coor vf__ = (-1) * scheme_ref.source.face_value[check][unique] * Sf__;
         double inlet_k = 1/2 * 0.01 * (vf__.dot(vf__));
         this->rhs_fc["fluid"].coeffRef(row, col) = (-1) * this->gamma["face"]["fluid"][col] * Sf__.norm() * inlet_k / dCf__.norm();
     }
@@ -1057,7 +1058,7 @@ void turb_e::calc_bound_rhs(int row, int col, std::string check, int unique, cfd
         axes& dCf_ = scheme_ref.mesh.geom["dCf"]["fluid"];
         coor Sf__ = Sf_.axes_to_coor(row, col);
         coor dCf__ = dCf_.axes_to_coor(row, col);
-        coor vf__ = (-1) * scheme_ref.source.value[check][unique] * Sf__;
+        coor vf__ = (-1) * scheme_ref.source.face_value[check][unique] * Sf__;
         make<double>::map_int& rho_f_ = scheme_ref.prop.rho["face"];
         make<double>::map_int& miu_f_ = scheme_ref.prop.miu["face"];
         make<double>::map_int& miut_ = scheme_ref.wall.miut;
@@ -1452,7 +1453,7 @@ void energy::calc_bound_lhs(int row, int col, std::string check, int unique, cfd
         // h_sky
         double g_hamb = gamma_f_[col] * Sf_.axes_to_val(row, col) / dCf_.axes_to_val(row, col);
         double T_f__ = this->value.fvalue[domain__][col];
-        double T_amb__ = scheme_ref.source.value["hamb"][0]; double T_sky__ = 0.0552 * pow(T_amb__, 1.5);
+        double T_amb__ = scheme_ref.source.face_value["hamb"][0]; double T_sky__ = 0.0552 * pow(T_amb__, 1.5);
         double eps_C__ = scheme_ref.prop.eps["cell"][row];
         double h_sky__ = 5.67 * pow(10, -8) * eps_C__ * (T_f__ + T_sky__) * (pow(T_f__, 2) + pow(T_sky__, 2)) * (T_f__ - T_sky__) / (T_f__ - T_amb__);
         // h_free_conv
@@ -1514,17 +1515,17 @@ void energy::calc_bound_rhs(int row, int col, std::string check, int unique, cfd
         axes& Sf_ = scheme_ref.mesh.geom["Sf"][domain__];
         axes& dCf_ = scheme_ref.mesh.geom["dCf"][domain__];
         make<double>::map_int& gamma_f_ = this->gamma["face"][domain__];
-        this->rhs_fc[domain__].coeffRef(row, col) = gamma_f_[col] * Sf_.axes_to_val(row, col) * scheme_ref.source.value[check][unique]/ dCf_.axes_to_val(row, col);
+        this->rhs_fc[domain__].coeffRef(row, col) = gamma_f_[col] * Sf_.axes_to_val(row, col) * scheme_ref.source.face_value[check][unique]/ dCf_.axes_to_val(row, col);
     }
     else if(check.compare("flux"))
     {
         axes& Sf_ = scheme_ref.mesh.geom["Sf"][domain__];
-        this->rhs_fc[domain__].coeffRef(row, col) = scheme_ref.source.value[check][unique] * Sf_.axes_to_val(row, col);
+        this->rhs_fc[domain__].coeffRef(row, col) = scheme_ref.source.face_value[check][unique] * Sf_.axes_to_val(row, col);
     }
     else if(check.compare("s2s"))
     {
         axes& Sf_ = scheme_ref.mesh.geom["Sf"][domain__];
-        this->rhs_fc[domain__].coeffRef(row, col) = scheme_ref.source.value[check][unique];
+        this->rhs_fc[domain__].coeffRef(row, col) = scheme_ref.source.face_value[check][unique];
     }
     else if(check.compare("hamb"))
     {
@@ -1534,7 +1535,7 @@ void energy::calc_bound_rhs(int row, int col, std::string check, int unique, cfd
         // h_sky
         double g_hamb = gamma_f_[col] * Sf_.axes_to_val(row, col) / dCf_.axes_to_val(row, col);
         double T_f__ = this->value.fvalue[domain__][col];
-        double T_amb__ = scheme_ref.source.value["hamb"][0]; double T_sky__ = 0.0552 * pow(T_amb__, 1.5);
+        double T_amb__ = scheme_ref.source.face_value["hamb"][0]; double T_sky__ = 0.0552 * pow(T_amb__, 1.5);
         double eps_C__ = scheme_ref.prop.eps["cell"][row];
         double h_sky__ = 5.67 * pow(10, -8) * eps_C__ * (T_f__ + T_sky__) * (pow(T_f__, 2) + pow(T_sky__, 2)) * (T_f__ - T_sky__) / (T_f__ - T_amb__);
         // h_free_conv

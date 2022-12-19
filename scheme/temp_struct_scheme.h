@@ -105,9 +105,11 @@ struct binfo
     // isoflux(flux) value (unique), environment irr q
     // s2s(flux) value (unique), s2s solver q
     // hamb(hamb) value, ambient temperature
-    make<make<double>::map_int>::map_str value; // boundary name-unique-constant/iter value
+    make<make<double>::map_int>::map_str face_value; // boundary name-unique-constant/iter value
+    make<make<double>::map_str>::map_str cell_value;
     binfo() {};
-    binfo(make<make<double>::map_int>::map_str& value_in): value(value_in) {};
+    binfo(make<make<double>::map_int>::map_str& face_value_in, make<make<double>::map_str>::map_str& cell_value_in):
+          face_value(face_value_in), cell_value(cell_value_in) {};
 };
 class scheme
 {

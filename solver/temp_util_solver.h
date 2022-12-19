@@ -6,35 +6,92 @@
 
 namespace cfdsolver
 {
-template <class V>
+// commons
+template <class Obj, typename Type>
 struct interpolate
 {
-    V linear_face_itr(V valC__, V valF__, double gc__, bool is_gamma)
+    Type linear_face_itr(int C_id, int F_id, Obj& const eq__, cfdscheme::scheme& const scheme_ref, std::string what, std::string domain__)
     {
-        if(is_gamma)
+        switch(what)
         {
-            return (gc__ * valF__ + (1 - gc__) * valC__) / (valC__ * valF__);
-        }
-        else
-        {
-            return gc__ * valC__ + (1 - gc__) * valF__;
+            case "value":
+            double gc__ = scheme_ref.mesh.constants["gc"][domain__].coeffRef(C_id, F_id);
+            double Cval__ = eq__.value.cvalue[domain__][C_id];
+            double Fval__ = eq__.value.cvalue[domain__][F_id];
+            return gc__ * Cval__ + (1 - gc__) * Fval__;
+            case "grad":
+            double gc__ = scheme_ref.mesh.constants["gc"][domain__].coeffRef(C_id, F_id);
+            coor Cgrad__ = eq__.value.cgrad[domain__][C_id];
+            coor Fgrad__ = eq__.value.cgrad[domain__][F_id];
+            return gc__ * Cgrad__ + (1 - gc__) * Fgrad__;
+            case "gamma":
+            double gc__ = scheme_ref.mesh.constants["gc"][domain__]coeffRef(C_id, F_id);
+            double Cgamma__ = eq__.gamma[domain__][C_id];
+            double Fgamma__ = eq__.gamma[domain__][F_id];
+            return (gc__ * Fval__ + (1 - gc__) * Cval__) / (Cval__ * Fval__);
         };
     };
-    double quick_face_itr(double valC__, coor gradC__, coor gradf__, coor dCf__)
+    Type quick_face_itr(int C_id, int F_id, Obj& const eq__, cfdscheme::scheme& const scheme_ref, std::string what, std::string domain__)
     {
-        coor grad__ = gradC__ + gradf__;
-        return valC__ + gradf__.dot(dCf__) / 2;
+        switch(what)
+        {
+            case "value":
+            int f_id = eq__.mesh.cc_fc[domain__].coeffRef(C_id, F_id);
+            coor cdCf__ = scheme_ref.mesh.geom["dCf"][domain__].axes_to_coor(C_id, f_id);
+            coor Cgrad__ = eq__.value.cgrad[C_id];
+            coor Fgrad__ = eq__.value.cgrad[F_id];
+            coor fgrad__ = eq__.value.fgrad[f_id];
+            double Cval__ = eq__.value.cvalue[C_id];
+            return Cval__ + fgrad_itr__.dot(cdCf__) / 2;
+            case "grad":
+            int f_id = eq__.mesh.cc_fc.coeffRef(C_id, F_id);
+            double gc__ = scheme_ref.mesh.constants.gc.coeffRef(C_id, F_id);
+            coor ceCF__ = scheme_ref.mesh.geom.eCF.axes_to_coor(C_id, F_id);
+            double vdCf__ = scheme_ref.mesh.geom.dCf.axes_to_value(C_id,  f_id);
+            coor Cgrad__ = eq__.value.cgrad[C_id];
+            coor Fgrad__ = eq__.value.cgrad[F_id];
+            double Cval__ = eq__.value.cvalue[C_id];
+            double Fval__ = eq__.value.cvalue[F_id];
+            coor fgrad_itr_ = linear_face_itr(C_id, F_id, eq__, scheme_, "grad");
+            return fgrad_itr__ + ((Fval__ - Cval__) / vdCF__) * ceCF__ - (fgrad__.dot(ceCF__) * ceCF__);
+        };
     };
-    coor quick_grad_itr(double valC__, double valF__, coor gradC__, coor gradF__, double gc__, double coor dCF__, coor eCF__)
+    void least_square_itr(Obj& const eq__, cfdscheme::scheme& const scheme_ref, std::string domain__)
     {
-        double valdCF__ = sqrt_sum(dCF__);
-        coor gradf__ = interpolate::linear_face_itr(gradC__, gradF__, gc__, false);
-        return gradf__ + ((valF__ - valC__) / valdCF__) * eCF__ - (gradf__.dot(eCF__) * eCF__);
+        // calculate cgrad with optimization [A][B] = [C]
+        make<int>::sp_mat& lhs_cc_ = eq__.lhs_cc_[domain__];
+        make<double>::sp_mat& dCF_ = scheme_ref.mesh.geom["dCF"][domain__];
+        double Cval__; double Fval__;
+        coor cdCF__; double wk__;
+        int F_id;
+        for(int i = 0; i < cc_.outerSize(); i++)
+        {
+            Eigen::Matrix3d::Zero ls_lhs__;
+            Eigen::Vector3d::Zero ls_rhs__;
+            for(make<int>::sp_mat::InnerIterator it(lhs_cc_, i); it; it++)
+            {
+                Cval__ = eq__.value.cvalue[domain__][it.row()];
+                Fval__ = eq__.value.cvalue[domain__][it.col()];
+                cdCF__ = dCF_.axes_to_coor(it.row(), it.col());
+                wk__ = 1 / dCF_.axes_to_val(it.row(), it.col());
+                for(int j = 0; j < 2; j++)
+                {
+                    for(int k = 0; k < 2; k++)
+                    {
+                        ls_lhs__(i, j) += wk__ * cdCF__(i) * cdCF__(j);
+                    };
+                    ls_rhs__(i) += wk__ * cdCF__(i) * (Fval__ - Cval__);
+                };
+            };
+            Eigen::Vector3d x = ls_lhs__.template bdcSvd<Eigen::ComputeThinU | Eigen::ComputeThinV>().solve(ls_rhs__);
+            eq__.value.cgrad[domain__][it.row()] = x;
+        };
     };
 };
 double calc_fluid_prop(std::string what, double P, double T)
 {
     // rho, miu, cp
+    
 };
 // scheme object update functions outside cfdscheme namespace
 void update_wall(cfdscheme::scheme& const scheme_ref, cfdlinear::momentum& const u_ref, cfdlinear::momentum& const v_ref, cfdlinear::momentum& const w_ref,
@@ -87,6 +144,16 @@ void update_fluid_prop(cfdscheme::scheme& const scheme_ref, cfdlinear::energy& c
             scheme_ref.prop.cp[entry_str.first][entry_int.first] = calc_fluid_prop("cp", pval__, Tval__);
         };
     };
+};
+// scphghe iteration util
+bool check_convergence(make<make<double>::map_int>::map_str current, make<make<double>::map_int>::map_str prev, int min_res)
+{
+
+};
+// export
+void export_converge()
+{
+
 };
 };
 #endif
