@@ -1,22 +1,9 @@
 #include"temp_util_solver.h"
+#include"temp_struct_user.h"
 
 #ifdef SOLVERCFD_H
 namespace cfdsolver
 {
-class user
-{
-    public:
-    make<make<make<double>::map_str>::map_int>::map_str face_init; // face name - unique - u, v, w, T, k, e
-    make<make<make<double>::map_str>::map_str>::map_str cell_init; // cell domain - domain name - u, v, w, T, k, e
-    make<make<make<double>::map_int>::map_int>::map_str face_source; // .... - time step - value
-    make<make<make<double>::map_int>::map_str>::map_str cell_source; // .... - time step - value
-    user() {};
-    void update_source(int, cfdscheme::scheme&);
-    private:
-    void read_init_csv();
-    void read_source_csv();
-    void read_solid_prop_csv();
-};
 template <class V>
 struct solver
 {
@@ -92,10 +79,11 @@ struct solver
 class scphghe
 {
     public:
+    double absolute_humidity;
     double step_length;
     double under_relax;
-    int max_iter;
     double min_residual;
+    int max_iter;
     int current_time;
     solver<cfdlinear::momentum> solv_u;
     solver<cfdlinear::momentum> solv_v;
@@ -108,6 +96,9 @@ class scphghe
     scphghe() {};
     private:
     void make_scphghe(cfdscheme::scheme& const, double, double, int, double);
+    int SIMPLE_loop(cfdscheme::scheme&, bool);
+    int turb_loop(cfdscheme::scheme&, bool);
+    int energy_loop(cfdscheme::scheme&, double, bool);
     void iterate(cfdscheme::scheme&, user&, bool);
 };
 };

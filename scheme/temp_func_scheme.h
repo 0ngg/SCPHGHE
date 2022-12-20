@@ -29,8 +29,8 @@ void make_tri(finfo& face_, make<coor>::map_int& const nodes_)
     double area = 0.5 * pow(vcross.block(0, 0, 3, 1).sum(), 0.5);
     coor vnorm = v1.cross(v2);
     vnorm.norm();
-    face_.fcentroid(centroid);
-    face_.fnormal(vnorm);
+    face_.fcentroid = centroid;
+    face_.fnormal = vnorm;
     face_.farea = area;
 };
 void make_quad(finfo& face_, make<coor>::map_int& nodes_)
@@ -84,8 +84,8 @@ void make_quad(finfo& face_, make<coor>::map_int& nodes_)
     coor v2 =  nodes_[0] - nodes_[diag1.second];
     coor vnorm = v1.cross(v2);
     vnorm.norm();
-    face_.fcentroid(centroid);
-    face_.fnormal(vnorm);
+    face_.fcentroid = centroid;
+    face_.fnormal = vnorm;
     face_.farea = area;
 };
 void make_cell(minfo& mesh_, cinfo& cell_, make<finfo>::map_int& faces_)
@@ -109,7 +109,7 @@ void make_cell(minfo& mesh_, cinfo& cell_, make<finfo>::map_int& faces_)
         };
         vol += centroid.dot(norm) * entry.second.farea / 3;
     };
-    cell_.ccentroid(centroid);
+    cell_.ccentroid = centroid;
     cell_.cvolume = vol;
 };
 void minfo::make_id(mshio::MshSpec spec, make<cinfo>::map_int& cells_)
@@ -522,10 +522,10 @@ void minfo::make_geom(make<finfo>::map_int& faces, make<cinfo>::map_int& cells)
         {
             for(make<int>::sp_mat::InnerIterator it(cc_fc_[entry.first], i); it; it++)
             {
-                Sf__(Sf_[entry.first].axes_to_coor(it.row(), it.value()));
-                eCF__(eCF_[entry.first].axes_to_coor(it.row(), it.col()));
-                Ef__(eCF__ * (Sf__.dot(Sf__) / eCF__.dot(Sf__)));
-                Tf__(Sf__ - Ef__);
+                Sf__ = Sf_[entry.first].axes_to_coor(it.row(), it.value());
+                eCF__ = eCF_[entry.first].axes_to_coor(it.row(), it.col());
+                Ef__ = eCF__ * (Sf__.dot(Sf__) / eCF__.dot(Sf__));
+                Tf__ = Sf__ - Ef__;
                 Ef_[entry.first](it.row(), it.value(), Ef__);
                 Tf_[entry.first](it.row(), it.value(), Tf__);
             };
@@ -642,7 +642,7 @@ void minfo::make_clust(make<finfo>::map_int& faces)
                         };
                         cos1__ = norm1__.dot(v1__) / sqrt_sum(v1__);
                         cos2__ = norm2__.dot(v2__) / sqrt_sum(v2__);
-                        sq_sum__ = std::accumulate(v1__.begin(), v1__.end(), 0.0, square_sum);
+                        sq_sum__ = pow(v1__(0), 2) + pow(v1__(1), 2) + pow(v1__(2), 2);
                         view__ += (cos1__ * cos2__) / (*pi * sq_sum__);
                     };
                 };
@@ -778,10 +778,8 @@ void pinfo::make_pinfo(minfo& mesh_)
         for(int i = 0; i < cc_["s2s"].rows(); i++)
         {
             eps_.insert({i, 0.0});
-            alpha_.insert({i, 0.0});
         };
-        this->eps["fluid"] = eps_;
-        this->alpha["fluid"] = alpha_;
+        this->eps["s2s"] = eps_;
     };
 };
 // winfo

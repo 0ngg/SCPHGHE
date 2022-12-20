@@ -3,6 +3,7 @@
 
 #include"temp_util.h"
 #include"temp_struct_linear.h"
+#include"temp_struct_export.h"
 
 namespace cfdsolver
 {
@@ -88,10 +89,48 @@ struct interpolate
         };
     };
 };
-double calc_fluid_prop(std::string what, double P, double T)
+double calc_fluid_prop(std::string what, double P, double T, double W)
 {
-    // rho, miu, cp
-    
+    // rho, miu, cp, eps, alpha
+    // W = absolute humidity
+    if(what.compare("rho") == 0)
+    {
+        std::string rho_("Vha"); std::string T_("T");
+        std::string P_("P"); std::string W_("W");
+        return 1 / HumidAir::HAPropsSI(rho_, P_, P, T_, T, W_, W);
+    }
+    else if(what.compare("miu") == 0)
+    {
+        std::string mu_("mu"); std::string T_("T");
+        std::string P_("P"); std::string W_("W");
+        return HumidAir::HAPropsSI(mu_, P_, P, T_, T, W_, W);
+    }
+    else if(what.compare("cp") == 0)
+    {
+        std::string cp_("cp_ha"); std::string T_("T");
+        std::string P_("P"); std::string W_("W");
+        return HumidAir::HAPropsSI(cp_, P_, P, T_, T, W_, W);
+    }
+    else if(what.compare("k") == 0)
+    {
+        std::string k_("k"); std::string T_("T");
+        std::string P_("P"); std::string W_("W");
+        return HumidAir::HAPropsSI(k_, P_, P, T_, T, W_, W);
+    }
+    else if(what.compare("alpha") == 0)
+    {
+        // k / (rho * cp)
+        std::string rho_("Vha"); std::string k_("k"); std::string cp_("cp_ha");
+        std::string T_("T"); std::string P_("P"); std::string W_("W");
+        double k__ = HumidAir::HAPropsSI(k_, P_, P, T_, T, W_, W);
+        double rho__ = 1 / HumidAir::HAPropsSI(rho_, P_, P, T_, T, W_, W);
+        double cp__ = HumidAir::HAPropsSI(cp_, P_, P, T_, T, W_, W);
+        return k__ / (rho__ * cp__);
+    }
+    else
+    {
+        return 0.0;
+    };
 };
 // scheme object update functions outside cfdscheme namespace
 void update_wall(cfdscheme::scheme& const scheme_ref, cfdlinear::momentum& const u_ref, cfdlinear::momentum& const v_ref, cfdlinear::momentum& const w_ref,
@@ -121,9 +160,8 @@ void update_wall(cfdscheme::scheme& const scheme_ref, cfdlinear::momentum& const
         scheme_ref.wall.miut[entry.first] = miut__;
     };
 };
-void update_fluid_prop(cfdscheme::scheme& const scheme_ref, cfdlinear::energy& const energy_ref)
+void update_fluid_prop(cfdscheme::scheme& const scheme_ref, cfdlinear::energy& const energy_ref, double AH)
 {
-    cfdscheme::vinfo& pressure_ = scheme_ref.pressure;
     double pval__; double Tval__;
     for(std::pair<std::string, make<double>::map_int> entry_str : scheme_ref.prop.rho)
     {
@@ -131,29 +169,50 @@ void update_fluid_prop(cfdscheme::scheme& const scheme_ref, cfdlinear::energy& c
         {
             if(entry_str.first.compare("cell") == 0)
             {
-                pval__ = pressure_.cvalue["fluid"][entry_int.first];
+                pval__ = scheme_ref.pressure.cvalue["fluid"][entry_int.first];
                 Tval__ = energy_ref.value.cvalue["fluid"][entry_int.first];
             }
             else
             {
-                pval__ = pressure_.fvalue["fluid"][entry_int.first];
+                pval__ = scheme_ref.pressure.fvalue["fluid"][entry_int.first];
                 Tval__ = energy_ref.value.fvalue["fluid"][entry_int.first];
             };
-            scheme_ref.prop.rho[entry_str.first][entry_int.first] = calc_fluid_prop("rho", pval__, Tval__);
-            scheme_ref.prop.miu[entry_str.first][entry_int.first] = calc_fluid_prop("miu", pval__, Tval__);
-            scheme_ref.prop.cp[entry_str.first][entry_int.first] = calc_fluid_prop("cp", pval__, Tval__);
+            scheme_ref.prop.rho[entry_str.first][entry_int.first] = calc_fluid_prop("rho", pval__, Tval__, AH);
+            scheme_ref.prop.miu[entry_str.first][entry_int.first] = calc_fluid_prop("miu", pval__, Tval__, AH);
+            scheme_ref.prop.cp[entry_str.first][entry_int.first] = calc_fluid_prop("cp", pval__, Tval__, AH);
         };
     };
 };
 // scphghe iteration util
-bool check_convergence(make<make<double>::map_int>::map_str current, make<make<double>::map_int>::map_str prev, int min_res)
+template <class V>
+bool check_convergence(V solv__, double min_res)
 {
-
-};
-// export
-void export_converge()
-{
-
+    make<double>::sp_mat lhs__ = solv__.lhs;
+    Eigen::VectorXf rhs__ = solv__.rhs.column(0);
+    EIgen::VectorXf::Zeros cvalue__(solv__.rhs.rows());
+    for(std::pair<std::string, make<double>::map_int> entry1 : solv__.eq.value.cvalue)
+    {
+        for(std::pair<int, double> entry2 : entry1.second)
+        {
+            cvalue__(entry2.first) = entry2.second;
+        };
+    };
+    Eigen::VectorXf x = lhs__ * cvalue__;
+    x = rhs__ - x;
+    double res = 0.0;
+    for(auto i : x)
+    {
+        res += pow(i, 2);
+    };
+    res = pow(res / rhs__.size(), 0.5);
+    if(res <= min_res)
+    {
+        return true;
+    }
+    else
+    {
+        return false;
+    };
 };
 };
 #endif

@@ -2,6 +2,7 @@
 #define UTILCFD_H
 
 #include<iostream>
+#include<fstream>
 #include<vector>
 #include<map>
 #include<string>
@@ -13,6 +14,7 @@
 #include<mshio/mshio.h>
 #include<Eigen/Core>
 #include<Eigen/Sparse>
+#include"HumidAirProp.h"
 
 using namespace Eigen;
 
@@ -37,7 +39,7 @@ double square_sum (double x, double y)
 };
 double sqrt_sum(coor v)
 {
-    return pow(std::accumulate(v.begin(), v.end(), 0.0, square_sum), 0.5);
+    return pow(pow(v(0), 2) + pow(v(1), 2) + pow(v(2), 2), 0.5);
 };
 struct axes
 {

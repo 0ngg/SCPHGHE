@@ -1,90 +1,80 @@
 #include"temp_struct_solver.h"
+#include"temp_struct_user.h"
 
 #ifdef SOLVERCFD_H
 namespace cfdsolver
 {
-// user func
-void user::read_init_csv()
-{
-
-};
-void user::read_source_csv()
-{
-
-};
-void user::read_solid_prop_csv()
-{
-
-};
-void user::update_source(int current_time, cfdscheme::scheme& scheme_ref)
-{
-    for(std::pair<std::string, make<double>::map_int> entry_face : scheme_ref.source.face_value)
-    {
-        for(std::pair<int, double> entry_face_int : entry_face.second)
-        {
-            entry_face_int.second = this->face_source[entry_face.first][entry_face_int.first][current_time];
-        };
-    };
-    for(std::pair<std::string, make<double>::map_str> entry_cell : scheme_ref.source.cell_value)
-    {
-        for(std::pair<std::string, double> entry_cell_str : entry_cell.second)
-        {
-            entry_cell_str.second = this->cell_source[entry_cell.first][entry_cell_str.first][current_time];
-        };
-    };
-};
 // solver func
 template <class V>
-void make_prev_lhs(solver<V> solv__, cfdscheme::scheme& scheme_ref, bool is_init, bool is_s2s)
+void make_prev_lhs(solver<V> solv__, cfdscheme::scheme& scheme_ref, int step_length__, bool is_init)
 {
-    // include if s2s karena beda sendiri (kali area, not volume)
+    make<double>::map_int& rho_c_ = scheme_ref.prop.rho["cell"];
+    make<double>::map_int& vol_ = scheme_ref.mesh.size["volume"];
     if(is_init)
     {
-        if(is_s2s)
+        // rho * vol / step length
+        for(int i = 0; i < solv__.lhs.outerSize(); i++)
         {
-            
-        }
-        else
-        {
-
+            for(Eigen::SparseMatrix<double, RowMajor>::InnerIterator it(solv__.lhs.outerSize(), i); it; it++)
+            {
+                if(it.row() == it.col())
+                {
+                    solv__.lhs.coeffRef(it.row(), it.row()) = rho_c_[it.row()] * vol_[it.row()] / step_length__;
+                };
+            };
         };
     }
     else
     {
-        if(is_s2s)
+        // rho * vol / (2*step length)
+        for(int i = 0; i < solv__.lhs.outerSize(); i++)
         {
-
-        };
-        else
-        {
-
+            for(Eigen::SparseMatrix<double, RowMajor>::InnerIterator it(solv__.lhs.outerSize(), i); it; it++)
+            {
+                if(it.row() == it.col())
+                {
+                    solv__.lhs.coeffRef(it.row(), it.row()) = rho_c_[it.row()] * vol_[it.row()] / (2 * step_length__);
+                };
+            };
         };
     };
 };
 template <class V>
-void make_prev_rhs(solver<V> solv__, cfdscheme::scheme& scheme_ref, bool is_init, bool is_s2s)
+void make_prev_rhs(solver<V> solv__, cfdscheme::scheme& scheme_ref, int step_length__, bool is_init)
 {
-    // include if s2s karena beda sendiri (kali area, not volume)
+    make<double>::map_int& rho_c_ = scheme_ref.prop.rho["cell"];
+    make<double>::map_int& vol_ = scheme_ref.mesh.size["volume"];
+    make<double>::map_int& cvalue_ = solv__.eq.value.cvalue["fluid"];
     if(is_init)
     {
-        if(is_s2s)
+        // rho * vol * converged value / step length
+        for(int i = 0; i < solv__.rhs.outerSize(); i++)
         {
-
-        }
-        else
-        {
-
+            for(Eigen::SparseMatrix<double, RowMajor>::InnerIterator it(solv__.rhs.outerSize(), i); it; it++)
+            {
+                make<double>::map_int::iterator it_cell = cvalue_.find(it.row());
+                if(it_cell != cvalue_.end())
+                {
+                    solv__.rhs.coeffRef(it.row(), 0) = rho_c_[it.row()] * vol_[it.row()] * cvalue_[it.row()] / step_length__;
+                };
+                break;
+            };
         };
     }
     else
     {
-        if(is_s2s)
+        // rho * vol * converged value / (2*step length)
+        for(int i = 0; i < solv__.rhs.outerSize(); i++)
         {
-            
-        };
-        else
-        {
-
+            for(Eigen::SparseMatrix<double, RowMajor>::InnerIterator it(solv__.rhs.outerSize(), i); it; it++)
+            {
+                make<double>::map_int::iterator it_cell = cvalue_.find(it.row());
+                if(it_cell != cvalue_.end())
+                {
+                    solv__.rhs.coeffRef(it.row(), 0) = rho_c_[it.row()] * vol_[it.row()] * cvalue_[it.row()] / (2 * step_length__);
+                };
+                break;
+            };
         };
     };
 };
@@ -163,7 +153,7 @@ Eigen::VectorXf get_new_values(solver<V> solv__)
 {
     Eigen::BiCGSTAB<Eigen::SparseMatrix<double, RowMajor>> solver;
     make<double>::sp_mat lhs__ = solv__.lhs;
-    Eigen::VectorXf rhs__ = solv__.rhs.row(0);
+    Eigen::VectorXf rhs__ = solv__.rhs.column(0);
     solver.compute(lhs__);
     Eigen::VectorXf x = solver.solve(rhs__);
     return x;
@@ -220,35 +210,19 @@ void scphghe::make_scphghe(cfdscheme::scheme& const scheme_ref, double step_leng
     cfdlinear::s2s s2s_ = cfdlinear::s2s(scheme_ref);
     this->solv_s2s = solver(s2s_, scheme_ref, step_length_in);
 };
-void scphghe::iterate(cfdscheme::scheme& scheme_ref, user& user_ref, bool is_init)
+int scphghe::SIMPLE_loop(cfdscheme::scheme& scheme_ref, bool is_init)
 {
-    // momentum - pcorrect loop, loop 1
-    // turb_k - turb_e loop, loop 2
-    // loop 1 - loop 2 loop, loop 12
-    // s2s - energy loop, loop 3
-    // loop 12 - loop 3, loop 123
+    // momentum - pcorrect loop
     cfdlinear::momentum& u_ = this->solv_u.eq;
     cfdlinear::momentum& v_ = this->solv_v.eq;
     cfdlinear::momentum& w_ = this->solv_w.eq;
-    cfdlinear::pcorrect& pcor_ = this->solv_pcor.eq;
     cfdlinear::turb_k& k_ = this->solv_k.eq;
-    cfdlinear::turb_e& e_ = this->solv_e.eq;
-    cfdlinear::energy& energy_ = this->solv_energy.eq;
-    cfdlinear::s2s& s2s_ = this->solv_s2s.eq;
-    // loop 1, anchor check convergence -> pcor
+    cfdlinear::pcorrect& pcor_ = this->solv_pcor.eq;
     int ctrl = 0;
     int passes = 0;
     while(ctrl < this->max_iter)
     {
         passes += 1;
-        // pcor
-        make<make<double>::map_int>::map_str prev_iter_cvalue = pcor_.value.cvalue;
-        pcor_.update_linear(scheme_ref, u_, v_, w_);
-        make_transient_lhs(this->solv_pcor, this->under_relax);
-        make_transient_rhs(this->solv_pcor, this->under_relax);
-        update_values(this->solv_pcor, scheme_ref);
-        this->solv_pcor.eq.update_correction(scheme_ref, u_, v_, w_);
-        make<make<double>::map_int>::map_str current_iter_cvalue = pcor_.value.cvalue;
         // momentum
         u_.update_linear(scheme_ref, k_, v_, w_);
         make_transient_lhs(this->solv_u, this->under_relax);
@@ -262,69 +236,151 @@ void scphghe::iterate(cfdscheme::scheme& scheme_ref, user& user_ref, bool is_ini
         update_values(this->solv_u, scheme_ref);
         update_values(this->solv_v, scheme_ref);
         update_values(this->solv_w, scheme_ref);
-        if(check_convergence(current_iter_cvalue, prev_iter_cvalue, this->min_residual))
+        u_.calc_wall(scheme_ref, v_, w_);
+        v_.calc_wall(scheme_ref, u_, w_);
+        w_.calc_wall(scheme_ref, u_, v_);
+        // pcor
+        pcor_.update_linear(scheme_ref, u_, v_, w_);
+        make_transient_lhs(this->solv_pcor, this->under_relax);
+        make_transient_rhs(this->solv_pcor, this->under_relax);
+        update_values(this->solv_pcor, scheme_ref);
+        this->solv_pcor.eq.update_correction(scheme_ref, u_, v_, w_);
+        // new cvalue, old lhs - rhs
+        if(check_convergence(this->solv_u, this->min_residual) &&
+           check_convergence(this->solv_v, this->min_residual) &&
+           check_convergence(this->solv_w, this->min_residual))
         {
-            passes += 1;
-            // loop 2, anchor check convergence -> turb_k
-            make<make<double>::map_int>::map_str prev_iter_cvalue = k_.value.cvalue;
-            k_.update_linear(scheme_ref, e_, u_, v_, w_);
-            make_transient_lhs(this->solv_k, this->under_relax);
-            make_transient_rhs(this->solv_k, this->under_relax);
-            update_values(this->solv_k, scheme_ref);
-            make<make<double>::map_int>::map_str current_iter_cvalue = k_.value.cvalue;
-            e_.update_linear(scheme_ref, k_, u_, v_, w_);
-            make_transient_lhs(this->solv_e, this->under_relax);
-            make_transient_rhs(this->solv_e, this->under_relax);
-            update_values(this->solv_e, scheme_ref);
-            if(check_convergence(current_iter_cvalue, prev_iter_cvalue, this->min_residual))
+            if(passes < 2)
             {
-                passes += 1;
-                // loop 3, anchor check convergence -> energy
-                s2s_.update_linear(scheme_ref, energy_);
-                make_transient_lhs(this->solv_s2s, this->under_relax);
-                make_transient_rhs(this->solv_s2s, this->under_relax);
-                update_values(this->solv_s2s, scheme_ref);
-                s2s_.update_source_s2s(scheme_ref);
-                make<make<double>::map_int>::map_str prev_iter_cvalue = energy_.value.cvalue;
-                energy_.update_linear(scheme_ref, u_, v_, w_);
-                make_transient_lhs(this->solv_energy, this->under_relax);
-                make_transient_rhs(this->solv_energy, this->under_relax);
-                update_values(this->solv_energy, scheme_ref);
-                make<make<double>::map_int>::map_str current_iter_cvalue = energy_.value.cvalue;
-                if(check_convergence(current_iter_cvalue, prev_iter_cvalue, this->min_residual))
-                {
-                    update_fluid_prop(scheme_ref, energy_);
-                    update_wall(scheme_ref, u_, v_, w_, k_, e_, energy_);
-                    ctrl += 1;
-                    if(passes < 5) // max. 4 passes
-                    {
-                        make_prev_rhs<cfdlinear::momentum>(this->solv_u, scheme_ref, is_init, false);
-                        make_prev_rhs<cfdlinear::momentum>(this->solv_v, scheme_ref, is_init, false);
-                        make_prev_rhs<cfdlinear::momentum>(this->solv_w, scheme_ref, is_init, false);
-                        make_prev_rhs<cfdlinear::pcorrect>(this->solv_pcor, scheme_ref, is_init, false);
-                        make_prev_rhs<cfdlinear::turb_k>(this->solv_k, scheme_ref, is_init, false);
-                        make_prev_rhs<cfdlinear::turb_e>(this->solv_e, scheme_ref, is_init, false);
-                        make_prev_rhs<cfdlinear::energy>(this->solv_energy, scheme_ref, is_init, false);
-                        make_prev_rhs<cfdlinear::s2s>(this->solv_s2s, scheme_ref, is_init, true);
-                        this->current_time += 1;
-                        user_ref.update_source(this->current_time, scheme_ref);
-                        export_converge();
-                        return;
-                    }
-                    else
-                    {
-                        // update lhs prev transient (aC)
-                        make_prev_lhs<cfdlinear::momentum>(this->solv_u, scheme_ref, is_init, false);
-                        make_prev_lhs<cfdlinear::momentum>(this->solv_v, scheme_ref, is_init, false);
-                        make_prev_lhs<cfdlinear::momentum>(this->solv_w, scheme_ref, is_init, false);
-                        make_prev_lhs<cfdlinear::pcorrect>(this->solv_pcor, scheme_ref, is_init, false);
-                        make_prev_lhs<cfdlinear::turb_k>(this->solv_k, scheme_ref, is_init, false);
-                        make_prev_lhs<cfdlinear::turb_e>(this->solv_e, scheme_ref, is_init, false);
-                        make_prev_lhs<cfdlinear::energy>(this->solv_energy, scheme_ref, is_init, false);
-                        make_prev_lhs<cfdlinear::s2s>(this->solv_s2s, scheme_ref, is_init, true);
-                    };
-                };
+                make_prev_lhs<cfdlinear::momentum>(this->solv_u, scheme_ref, this->step_length, is_init);
+                make_prev_lhs<cfdlinear::momentum>(this->solv_v, scheme_ref, this->step_length, is_init);
+                make_prev_lhs<cfdlinear::momentum>(this->solv_w, scheme_ref, this->step_length, is_init);
+                make_prev_lhs<cfdlinear::pcorrect>(this->solv_pcor, scheme_ref, this->step_length, is_init);
+                make_prev_rhs<cfdlinear::momentum>(this->solv_u, scheme_ref, this->step_length, is_init);
+                make_prev_rhs<cfdlinear::momentum>(this->solv_v, scheme_ref, this->step_length, is_init);
+                make_prev_rhs<cfdlinear::momentum>(this->solv_w, scheme_ref, this->step_length, is_init);
+                make_prev_rhs<cfdlinear::pcorrect>(this->solv_pcor, scheme_ref, this->step_length, is_init);
+                return ctrl;
+            }
+            else
+            {
+                passes = 0;
+                make_prev_lhs<cfdlinear::momentum>(this->solv_u, scheme_ref, this->step_length, is_init);
+                make_prev_lhs<cfdlinear::momentum>(this->solv_v, scheme_ref, this->step_length, is_init);
+                make_prev_lhs<cfdlinear::momentum>(this->solv_w, scheme_ref, this->step_length, is_init);
+                make_prev_lhs<cfdlinear::pcorrect>(this->solv_pcor, scheme_ref, this->step_length, is_init);
+                ctrl += 1;
             };
+        };
+    };
+};
+int scphghe::turb_loop(cfdscheme::scheme& scheme_ref, bool is_init)
+{
+    cfdlinear::momentum& u_ = this->solv_u.eq;
+    cfdlinear::momentum& v_ = this->solv_v.eq;
+    cfdlinear::momentum& w_ = this->solv_w.eq;
+    cfdlinear::turb_k& k_ = this->solv_k.eq;
+    cfdlinear::turb_e& e_ = this->solv_e.eq;
+    int ctrl = 0;
+    int passes = 0;
+    while (ctrl < this->max_iter)
+    {
+        passes += 1;
+        // turb_k
+        k_.update_linear(scheme_ref, e_, u_, v_, w_);
+        make_transient_lhs(this->solv_k, this->under_relax);
+        make_transient_rhs(this->solv_k, this->under_relax);
+        update_values(this->solv_k, scheme_ref);
+        k_.calc_wall(scheme_ref, e_);
+        // turb_e
+        e_.update_linear(scheme_ref, k_, u_, v_, w_);
+        make_transient_lhs(this->solv_e, this->under_relax);
+        make_transient_rhs(this->solv_e, this->under_relax);
+        update_values(this->solv_e, scheme_ref);
+        e_.calc_wall(scheme_ref);
+        if(check_convergence(this->solv_k, this->min_residual) &&
+           check_convergence(this->solv_e, this->min_residual))
+        {
+            if(passes < 2)
+            {
+                make_prev_lhs<cfdlinear::turb_k>(this->solv_k, scheme_ref, this->step_length, is_init);
+                make_prev_lhs<cfdlinear::turb_e>(this->solv_e, scheme_ref, this->step_length, is_init);
+                make_prev_rhs<cfdlinear::turb_k>(this->solv_k, scheme_ref, this->step_length, is_init);
+                make_prev_rhs<cfdlinear::turb_e>(this->solv_e, scheme_ref, this->step_length, is_init);
+                return ctrl;
+            }
+            else
+            {
+                passes = 0;
+                make_prev_lhs<cfdlinear::turb_k>(this->solv_k, scheme_ref, this->step_length, is_init);
+                make_prev_lhs<cfdlinear::turb_e>(this->solv_e, scheme_ref, this->step_length, is_init);
+                ctrl += 1;
+            };
+        };
+    };
+};
+int scphghe::energy_loop(cfdscheme::scheme& scheme_ref, double AH, bool is_init)
+{
+    cfdlinear::momentum& u_ = this->solv_u.eq;
+    cfdlinear::momentum& v_ = this->solv_v.eq;
+    cfdlinear::momentum& w_ = this->solv_w.eq;
+    cfdlinear::energy& energy_ = this->solv_energy.eq;
+    cfdlinear::s2s& s2s_ = this->solv_s2s.eq;
+    int ctrl = 0;
+    int passes = 0;
+    while(ctrl < this->max_iter)
+    {
+        passes += 1;
+        // s2s
+        s2s_.update_linear(scheme_ref, energy_);
+        make_transient_lhs(this->solv_s2s, this->under_relax);
+        make_transient_rhs(this->solv_s2s, this->under_relax);
+        update_values(this->solv_s2s, scheme_ref);
+        s2s_.update_source_s2s(scheme_ref);
+        // energy
+        energy_.update_linear(scheme_ref, u_, v_, w_, AH);
+        make_transient_lhs(this->solv_energy, this->under_relax);
+        make_transient_rhs(this->solv_energy, this->under_relax);
+        update_values(this->solv_energy, scheme_ref);
+        energy_.calc_wall(scheme_ref, AH);
+        if(check_convergence(this->solv_energy, this->min_residual) &&
+           check_convergence(this->solv_s2s, this->min_residual))
+        {
+            if(passes < 2)
+            {
+                update_fluid_prop(scheme_ref, energy_, AH);
+                make_prev_lhs<cfdlinear::energy>(this->solv_energy, scheme_ref, this->step_length, is_init);
+                make_prev_rhs<cfdlinear::energy>(this->solv_energy, scheme_ref, this->step_length, is_init);
+                return ctrl;
+            }
+            else
+            {
+                passes = 0;
+                make_prev_lhs<cfdlinear::energy>(this->solv_energy, scheme_ref, this->step_length, is_init);
+                ctrl += 1;
+            };
+        };
+    };
+};
+void scphghe::iterate(cfdscheme::scheme& scheme_ref, user& user_ref, bool is_init)
+{
+    int ctrl_iter = 0;
+    int ctrl_inner = 0;
+    user_ref.update_source(this->current_time, scheme_ref);
+    double AH = this->absolute_humidity;
+    while(ctrl_iter < this->max_iter)
+    {
+        ctrl_inner += SIMPLE_loop(scheme_ref, is_init);
+        ctrl_inner += turb_loop(scheme_ref, is_init);
+        ctrl_inner += energy_loop(scheme_ref, AH, is_init);
+        if(ctrl_inner < 4)
+        {
+            // export solution at time t
+            this->current_time += 1;
+        }
+        else
+        {
+            ctrl_iter += 1;
         };
     };
 };

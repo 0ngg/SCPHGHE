@@ -1,4 +1,5 @@
 #include"temp_struct_linear.h"
+#include"temp_util_solver.h"
 #include"temp_func_solver.h"
 
 #ifdef LINEARCFD_H
@@ -39,53 +40,49 @@ void s2s::make_linear(cfdscheme::scheme& const scheme_ref)
     append_template(make<std::string>::vec{"s2s"}, this, scheme_ref);
 };
 // update_linear
-void pcorrect::update_linear(cfdscheme::scheme& const scheme_ref, momentum& const u_ref, momentum& const v_ref, momentum& const w_ref)
+void pcorrect::update_linear(cfdscheme::scheme& const scheme_ref, momentum& u_ref, momentum& v_ref, momentum& w_ref)
 {
     this->calc_lhs(scheme_ref, u_ref, v_ref, w_ref);
     this->calc_rhs(scheme_ref, u_ref, v_ref, w_ref);
     //solve
 };
-void momentum::update_linear(cfdscheme::scheme& const scheme_ref, turb_k& const k_ref, momentum& const v1_ref, momentum& const v2_ref)
+void momentum::update_linear(cfdscheme::scheme& const scheme_ref, turb_k& k_ref, momentum& v1_ref, momentum& v2_ref)
 {
-    this->calc_wall(scheme_ref, v1_ref, v2_ref);
     this->calc_gamma(scheme_ref);
     this->calc_lhs(scheme_ref, v1_ref, v2_ref);
     this->calc_rhs(scheme_ref, k_ref, v1_ref, v2_ref);
     //solve
 };
-void turb_k::update_linear(cfdscheme::scheme& const scheme_ref, turb_e& const e_ref, momentum& const u_ref,
-                           momentum& const v_ref, momentum& const w_ref)
+void turb_k::update_linear(cfdscheme::scheme& const scheme_ref, turb_e& e_ref, momentum& u_ref,
+                           momentum& v_ref, momentum& w_ref)
 {
-    this->calc_wall(scheme_ref, e_ref);
     this->calc_gamma(scheme_ref);
     this->calc_lhs(scheme_ref, u_ref, v_ref, w_ref);
     this->calc_rhs(scheme_ref, e_ref, u_ref, v_ref, w_ref);
     //solve
 };
-void turb_e::update_linear(cfdscheme::scheme& const scheme_ref, turb_k& const k_ref, momentum& const u_ref, momentum& const v_ref, momentum& const w_ref)
+void turb_e::update_linear(cfdscheme::scheme& const scheme_ref, turb_k& k_ref, momentum& u_ref, momentum& v_ref, momentum& w_ref)
 {
-    this->calc_wall(scheme_ref);
     this->calc_gamma(scheme_ref);
     this->calc_lhs(scheme_ref, u_ref, v_ref, w_ref);
     this->calc_rhs(scheme_ref, k_ref, u_ref, v_ref, w_ref);
     //solve
 };
-void energy::update_linear(cfdscheme::scheme& const scheme_ref, momentum& const u_ref, momentum& const v_ref, momentum& const w_ref)
+void energy::update_linear(cfdscheme::scheme& const scheme_ref, momentum& u_ref, momentum& v_ref, momentum& w_ref, double AH)
 {
-    this->calc_wall(scheme_ref);
-    this->calc_gamma(scheme_ref);
-    this->calc_lhs(scheme_ref, u_ref, v_ref, w_ref);
-    this->calc_rhs(scheme_ref, u_ref, v_ref, w_ref);
+    this->calc_gamma(scheme_ref, AH);
+    this->calc_lhs(scheme_ref, u_ref, v_ref, w_ref, AH);
+    this->calc_rhs(scheme_ref, u_ref, v_ref, w_ref, AH);
     //solve
 };
-void s2s::update_linear(cfdscheme::scheme& const scheme_ref, energy& const energy_ref)
+void s2s::update_linear(cfdscheme::scheme& const scheme_ref, energy& energy_ref)
 {
     this->calc_lhs(scheme_ref);
     this->calc_rhs(scheme_ref, energy_ref);
     //solve
 };
 // update_correcttion
-void pcorrect::update_correction(cfdscheme::scheme& const scheme_ref, momentum& const u_ref, momentum& const v_ref, momentum& w_ref)
+void pcorrect::update_correction(cfdscheme::scheme& const scheme_ref, momentum& u_ref, momentum& v_ref, momentum& w_ref)
 {
     make<int>::sp_mat& cc_fc_ = scheme_ref.mesh.cc_fc["fluid"];
     make<double>::map_int& rho_f_ = scheme_ref.prop.rho["face"];
@@ -138,8 +135,8 @@ void s2s::update_source_s2s(cfdscheme::scheme& const scheme_ref)
 };
 //coef calc
 //pcorrect
-void pcorrect::calc_lhs(cfdscheme::scheme& const scheme_ref, momentum& const u_ref, momentum& const v_ref,
-                        momentum& const w_ref)
+void pcorrect::calc_lhs(cfdscheme::scheme& const scheme_ref, momentum& u_ref, momentum& v_ref,
+                        momentum& w_ref)
 {
     make<double>::sp_mat& fc_ = this->lhs_fc["fluid"];
     make<double>::sp_mat& cc_ = this->lhs_cc["fluid"];
@@ -194,13 +191,12 @@ void pcorrect::calc_lhs(cfdscheme::scheme& const scheme_ref, momentum& const u_r
         cc_.coeffRef(row, row) = aC;
     };
 };
-void pcorrect::calc_rhs(cfdscheme::scheme& const scheme_ref, momentum& const u_ref, momentum& const v_ref,
-                        momentum& const w_ref)
+void pcorrect::calc_rhs(cfdscheme::scheme& const scheme_ref, momentum& u_ref, momentum& v_ref,
+                        momentum& w_ref)
 {
     make<double>::sp_mat& fc_ = this->rhs_fc["fluid"];
     make<double>::sp_mat& cc_ = this->rhs_cc["fluid"];
     make<double>::sp_mat& gc_ = scheme_ref.mesh.constants["gc"]["fluid"];
-    cfdscheme::vinfo& pressure_ = scheme_ref.pressure;
     make<int>::sp_mat& cc_fc_ = scheme_ref.mesh.cc_fc["fluid"];
     make<double>::map_int& rho_f_ = scheme_ref.prop.rho["face"];
     make<double>::map_int& vol_ = scheme_ref.mesh.size["volume"];
@@ -224,8 +220,8 @@ void pcorrect::calc_rhs(cfdscheme::scheme& const scheme_ref, momentum& const u_r
         for(Eigen::SparseMatrix<int, RowMajor>::InnerIterator it(cc_fc_, i); it; it++)
         {
             gc__ = gc_.coeffRef(it.row(), it.value());
-            prev_pgradf__ = pressure_.prev_fgrad["fluid"][it.value()];
-            prev_pgradf_itr__ = gc__ * pressure_.prev_cgrad["fluid"][it.row()] + (1 - gc__) * pressure_.prev_cgrad["fluid"][it.col()];
+            prev_pgradf__ = scheme_ref.pressure.prev_fgrad["fluid"][it.value()];
+            prev_pgradf_itr__ = gc__ * scheme_ref.pressure.prev_cgrad["fluid"][it.row()] + (1 - gc__) * scheme_ref.pressure.prev_cgrad["fluid"][it.col()];
             prev_pgradf_min__ = prev_pgradf__ - prev_pgradf_itr__;
             u_Df__ = (vol_[it.row()]/u_aC_.coeffRef(it.row(), it.row()) + vol_[it.col()]/u_aC_.coeffRef(it.col(), it.col())) / 2;
             v_Df__ = (vol_[it.row()]/v_aC_.coeffRef(it.row(), it.row()) + vol_[it.col()]/v_aC_.coeffRef(it.col(), it.col())) / 2;
@@ -254,15 +250,14 @@ void pcorrect::calc_bound_lhs(int row, int col, std::string check, int unique, c
 {
     if(check.compare("ns") == 0)
     {
-        cfdscheme::vinfo& pressure_ = scheme_ref.pressure;
         axes& Sf_ = scheme_ref.mesh.geom["Sf"]["fluid"];
         axes& Tf_ = scheme_ref.mesh.geom["Tf"]["fluid"];
-        double pc__ = pressure_.cvalue["fluid"][row];
-        coor prev_pgradc__ = pressure_.prev_cgrad["fluid"][row];
-        coor prev_pgradf__ = pressure_.prev_fgrad["fluid"][col];
+        double pc__ = scheme_ref.pressure.cvalue["fluid"][row];
+        coor prev_pgradc__ = scheme_ref.pressure.prev_cgrad["fluid"][row];
+        coor prev_pgradf__ = scheme_ref.pressure.prev_fgrad["fluid"][col];
         coor Sf__ = Sf_.axes_to_coor(row, col);
         coor Tf__ = Tf_.axes_to_coor(row, col);
-        pressure_.fvalue["fluid"][col] = pc__ + (prev_pgradc__.dot(Sf__) - prev_pgradf__.dot(Tf__)) / DauC__;
+        scheme_ref.pressure.fvalue["fluid"][col] = pc__ + (prev_pgradc__.dot(Sf__) - prev_pgradf__.dot(Tf__)) / DauC__;
     }
     else if(check.compare("in") == 0)
     {
@@ -300,7 +295,7 @@ void momentum::calc_gamma(cfdscheme::scheme& const scheme_ref)
         };
     };
 };
-void momentum::calc_wall(cfdscheme::scheme& const scheme_ref, momentum& const v1_ref, momentum& const v2_ref)
+void momentum::calc_wall(cfdscheme::scheme& const scheme_ref, momentum& v1_ref, momentum& v2_ref)
 {
     make<int>::vec& wall_cell_ = scheme_ref.mesh.cid["misc"]["wall"];
     make<double>::map_int& valuec_ = this->value.cvalue["fluid"];
@@ -334,7 +329,7 @@ void momentum::calc_wall(cfdscheme::scheme& const scheme_ref, momentum& const v1
         valuec_[*i] = ((std::log(d_plus__) / 0.41) + 5.25) * wall_parallel__(this->axis);
     };
 };
-void momentum::calc_lhs(cfdscheme::scheme& const scheme_ref, momentum& const v1_ref, momentum& const v2_ref)
+void momentum::calc_lhs(cfdscheme::scheme& const scheme_ref, momentum& v1_ref, momentum& v2_ref)
 {
     make<double>::sp_mat& fc_ = this->lhs_fc["fluid"];
     make<double>::sp_mat& cc_ = this->lhs_cc["fluid"];
@@ -392,12 +387,11 @@ void momentum::calc_lhs(cfdscheme::scheme& const scheme_ref, momentum& const v1_
         cc_.coeffRef(row, row) = aC;
     };
 };
-void momentum::calc_rhs(cfdscheme::scheme& const scheme_ref, turb_k& const k_ref, momentum& const v1_ref,
-                        momentum& const v2_ref)
+void momentum::calc_rhs(cfdscheme::scheme& const scheme_ref, turb_k& k_ref, momentum& v1_ref,
+                        momentum& v2_ref)
 {
     make<double>::sp_mat& fc_ = this->rhs_fc["fluid"];
     make<double>::sp_mat& cc_ = this->rhs_cc["fluid"];
-    cfdscheme::vinfo& pressure_ = scheme_ref.pressure;
     make<double>::sp_mat& gc_ = scheme_ref.mesh.constants["gc"]["fluid"];
     make<int>::sp_mat& cc_fc_ = scheme_ref.mesh.cc_fc["fluid"];
     make<double>::sp_mat& fcg_conv_aC_ = scheme_ref.mesh.constants["g_conv_aC"]["fluid"]; 
@@ -427,7 +421,7 @@ void momentum::calc_rhs(cfdscheme::scheme& const scheme_ref, turb_k& const k_ref
         for(Eigen::SparseMatrix<int, RowMajor>::InnerIterator it(cc_fc_, i); it; it++)
         {
             gc__ = gc_.coeffRef(it.row(), it.value());
-            Pf__ = pressure_.fvalue["fluid"][it.value()];
+            Pf__ = scheme_ref.pressure.fvalue["fluid"][it.value()];
             kf__ = k_ref.value.fvalue["fluid"][it.value()];
             gradc__ = this->value.cgrad["fluid"][it.row()];
             gradf_itr__ = gc__ * gradc__ + (1 - gc__) * this->value.cgrad["fluid"][it.col()];
@@ -470,7 +464,7 @@ void momentum::calc_rhs(cfdscheme::scheme& const scheme_ref, turb_k& const k_ref
     };
 };
 void momentum::calc_bound_lhs(int row, int col, std::string check, int unique, cfdscheme::scheme& const const scheme_ref,
-                              momentum& const v1_ref, momentum& const v2_ref)
+                              momentum& v1_ref, momentum& v2_ref)
 {
     if(check.compare("ns") == 0)
     {
@@ -515,11 +509,10 @@ void momentum::calc_bound_lhs(int row, int col, std::string check, int unique, c
     };
 };
 void momentum::calc_bound_rhs(int row, int col, std::string check, int unique, cfdscheme::scheme& const scheme_ref,
-                              momentum& const v1_ref, momentum& const v2_ref)
+                              momentum& v1_ref, momentum& v2_ref)
 {
     if(check.compare("ns") == 0)
     {
-        cfdscheme::vinfo& pressure_ = scheme_ref.pressure;
         axes& Sf_ = scheme_ref.mesh.geom["Sf"]["fluid"];
         axes& eCf_ = scheme_ref.mesh.geom["eCf"]["fluid"];
         axes& dCf_ = scheme_ref.mesh.geom["dCf"]["fluid"];
@@ -533,7 +526,7 @@ void momentum::calc_bound_rhs(int row, int col, std::string check, int unique, c
                                           this->value.fvalue["fluid"][col] * (1 - pow(eCf__(this->axis), 2)) +
                                           (v1_ref.value.cvalue["fluid"][row] - v1_ref.value.fvalue["fluid"][col]) * eCf__(v1_ref.axis) * eCf__(this->axis) +
                                           (v2_ref.value.cvalue["fluid"][row] - v2_ref.value.fvalue["fluid"][col]) * eCf__(v2_ref.axis) * eCf__(this->axis)
-                                          ) - (pressure_.fvalue["fluid"][col] * Sf__(this->axis));
+                                          ) - (scheme_ref.pressure.fvalue["fluid"][col] * Sf__(this->axis));
     }
     else if(check.compare("in") == 0)
     {
@@ -546,7 +539,6 @@ void momentum::calc_bound_rhs(int row, int col, std::string check, int unique, c
     }
     else if(check.compare("out") == 0)
     {
-        cfdscheme::vinfo& pressure_ = scheme_ref.pressure;
         axes& Sf_ = scheme_ref.mesh.geom["Sf"]["fluid"];
         axes& eCf_ = scheme_ref.mesh.geom["eCf"]["fluid"];
         axes& dCf_ = scheme_ref.mesh.geom["dCf"]["fluid"];
@@ -568,7 +560,7 @@ void momentum::calc_bound_rhs(int row, int col, std::string check, int unique, c
         v2_f__ = v2_ref.value.cvalue["fluid"][row] + (v2_gradf__.dot(dCf__));
         vf__(this->axis) = v0_f__; vf__(v1_ref.axis) = v1_f__; vf__(v2_ref.axis) = v2_f__; 
         this->rhs_fc["fluid"].coeffRef(row, col) = (-1) * scheme_ref.prop.rho["face"][col] * (vf__.dot(Sf__)) * (v0_gradc__.dot(dCf__)) -
-                                          (pressure_.fvalue["fluid"][col] * Sf__(this->axis));
+                                          (scheme_ref.pressure.fvalue["fluid"][col] * Sf__(this->axis));
     }
     else
     {
@@ -598,7 +590,7 @@ void turb_k::calc_gamma(cfdscheme::scheme& const scheme_ref)
         };
     };
 };
-void turb_k::calc_wall(cfdscheme::scheme& const scheme_ref, turb_e& const e_ref)
+void turb_k::calc_wall(cfdscheme::scheme& const scheme_ref, turb_e& e_ref)
 {
     make<int>::vec& wall_cell_ = scheme_ref.mesh.cid["misc"]["wall"];
     make<double>::map_int& valuec_ = this->value.cvalue["fluid"];
@@ -610,7 +602,7 @@ void turb_k::calc_wall(cfdscheme::scheme& const scheme_ref, turb_e& const e_ref)
         valuec_[*i] = 1 / pow(cmiu__, 0.5);
     };
 };
-void turb_k::calc_lhs(cfdscheme::scheme& const scheme_ref, momentum& const u_ref, momentum& const v_ref, momentum& const w_ref)
+void turb_k::calc_lhs(cfdscheme::scheme& const scheme_ref, momentum& u_ref, momentum& v_ref, momentum& w_ref)
 {
     make<double>::sp_mat& fc_ = this->lhs_fc["fluid"];
     make<double>::sp_mat& cc_ = this->lhs_cc["fluid"];
@@ -668,12 +660,11 @@ void turb_k::calc_lhs(cfdscheme::scheme& const scheme_ref, momentum& const u_ref
         cc_.coeffRef(row, row) = aC;
     };
 };
-void turb_k::calc_rhs(cfdscheme::scheme& const scheme_ref, turb_e& const e_ref, momentum& const u_ref,
-                      momentum& const v_ref, momentum& const w_ref)
+void turb_k::calc_rhs(cfdscheme::scheme& const scheme_ref, turb_e& e_ref, momentum& u_ref,
+                      momentum& v_ref, momentum& w_ref)
 {
     make<double>::sp_mat& fc_ = this->lhs_fc["fluid"];
     make<double>::sp_mat& cc_ = this->lhs_cc["fluid"];
-    cfdscheme::vinfo& pressure_ = scheme_ref.pressure;
     make<double>::sp_mat& gc_ = scheme_ref.mesh.constants["gc"]["fluid"];
     make<int>::sp_mat& cc_fc_ = scheme_ref.mesh.cc_fc["fluid"];
     make<double>::sp_mat& fcg_conv_aC_ = scheme_ref.mesh.constants["g_conv_aC"]["fluid"]; 
@@ -702,7 +693,7 @@ void turb_k::calc_rhs(cfdscheme::scheme& const scheme_ref, turb_e& const e_ref, 
         for(Eigen::SparseMatrix<int, RowMajor>::InnerIterator it(cc_fc_, i); it; it++)
         {
             gc__ = gc_.coeffRef(it.row(), it.value());
-            Pf__ = pressure_.fvalue["fluid"][it.value()];
+            Pf__ = scheme_ref.pressure.fvalue["fluid"][it.value()];
             gradc__ = this->value.cgrad["fluid"][it.row()];
             gradf_itr__ = gc__ * gradc__ + (1 - gc__) * this->value.cgrad["fluid"][it.col()];
             Ef__ = Ef_.axes_to_coor(it.row(), it.value());
@@ -744,7 +735,7 @@ void turb_k::calc_rhs(cfdscheme::scheme& const scheme_ref, turb_e& const e_ref, 
     };
 };
 void turb_k::calc_bound_lhs(int row, int col, std::string check, int unique, cfdscheme::scheme& const scheme_ref,
-                            momentum& const u_ref, momentum& const v_ref, momentum& const w_ref)
+                            momentum& u_ref, momentum& v_ref, momentum& w_ref)
 {
     if(check.compare("in") == 0)
     {
@@ -785,7 +776,7 @@ void turb_k::calc_bound_lhs(int row, int col, std::string check, int unique, cfd
     };
 }; 
 void turb_k::calc_bound_rhs(int row, int col, std::string check, int unique, cfdscheme::scheme& const scheme_ref,
-                            momentum& const u_ref, momentum& const v_ref, momentum& const w_ref)
+                            momentum& u_ref, momentum& v_ref, momentum& w_ref)
 {
     if(check.compare("in") == 0)
     {
@@ -871,7 +862,7 @@ void turb_e::calc_wall(cfdscheme::scheme& const scheme_ref)
         valuec_[*i] = viu__ / (u_tau__ * 0.41 * d_perp__);
     };
 };
-void turb_e::calc_lhs(cfdscheme::scheme& const scheme_ref, momentum& const u_ref, momentum& const v_ref, momentum& const w_ref)
+void turb_e::calc_lhs(cfdscheme::scheme& const scheme_ref, momentum& u_ref, momentum& v_ref, momentum& w_ref)
 {
     make<double>::sp_mat& fc_ = this->lhs_fc["fluid"];
     make<double>::sp_mat& cc_ = this->lhs_cc["fluid"];
@@ -929,11 +920,10 @@ void turb_e::calc_lhs(cfdscheme::scheme& const scheme_ref, momentum& const u_ref
         cc_.coeffRef(row, row) = aC;
     };
 };
-void turb_e::calc_rhs(cfdscheme::scheme& const scheme_ref, turb_k& const k_ref, momentum& const u_ref, momentum& const v_ref, momentum& const w_ref)
+void turb_e::calc_rhs(cfdscheme::scheme& const scheme_ref, turb_k& k_ref, momentum& u_ref, momentum& v_ref, momentum& w_ref)
 {
     make<double>::sp_mat& fc_ = this->lhs_fc["fluid"];
     make<double>::sp_mat& cc_ = this->lhs_cc["fluid"];
-    cfdscheme::vinfo& pressure_ = scheme_ref.pressure;
     make<double>::sp_mat& gc_ = scheme_ref.mesh.constants["gc"]["fluid"];
     make<int>::sp_mat& cc_fc_ = scheme_ref.mesh.cc_fc["fluid"];
     make<double>::sp_mat& fcg_conv_aC_ = scheme_ref.mesh.constants["g_conv_aC"]["fluid"]; 
@@ -963,7 +953,7 @@ void turb_e::calc_rhs(cfdscheme::scheme& const scheme_ref, turb_k& const k_ref, 
         for(Eigen::SparseMatrix<int, RowMajor>::InnerIterator it(cc_fc_, i); it; it++)
         {
             gc__ = gc_.coeffRef(it.row(), it.value());
-            Pf__ = pressure_.fvalue["fluid"][it.value()];
+            Pf__ = scheme_ref.pressure.fvalue["fluid"][it.value()];
             gradc__ = this->value.cgrad["fluid"][it.row()];
             gradf_itr__ = gc__ * gradc__ + (1 - gc__) * this->value.cgrad["fluid"][it.col()];
             Ef__ = Ef_.axes_to_coor(it.row(), it.value());
@@ -1009,7 +999,7 @@ void turb_e::calc_rhs(cfdscheme::scheme& const scheme_ref, turb_k& const k_ref, 
     };
 };
 void turb_e::calc_bound_lhs(int row, int col, std::string check, int unique, cfdscheme::scheme& const scheme_ref,
-                            momentum& const u_ref, momentum& const v_ref, momentum& const w_ref)
+                            momentum& u_ref, momentum& v_ref, momentum& w_ref)
 {
     if(check.compare("in") == 0)
     {
@@ -1050,7 +1040,7 @@ void turb_e::calc_bound_lhs(int row, int col, std::string check, int unique, cfd
     };
 }; 
 void turb_e::calc_bound_rhs(int row, int col, std::string check, int unique, cfdscheme::scheme& const scheme_ref,
-                            momentum& const u_ref, momentum& const v_ref, momentum& const w_ref)
+                            momentum& u_ref, momentum& v_ref, momentum& w_ref)
 {
     if(check.compare("in") == 0)
     {
@@ -1102,7 +1092,7 @@ void turb_e::calc_bound_rhs(int row, int col, std::string check, int unique, cfd
     };
 };
 //energy
-void energy::calc_gamma(cfdscheme::scheme& const scheme_ref)
+void energy::calc_gamma(cfdscheme::scheme& const scheme_ref, double AH)
 {
     for(std::pair<std::string, make<double>::sp_mat> entry : this->lhs_cc)
     {
@@ -1112,7 +1102,6 @@ void energy::calc_gamma(cfdscheme::scheme& const scheme_ref)
         make<int>::sp_mat& cc_fc_ = scheme_ref.mesh.cc_fc[entry.first];
         make<double>::map_int& k_ = scheme_ref.prop.k["face"];
         make<double>::map_int& cp_c_ = scheme_ref.prop.cp["cell"];
-        make<double>::map_int& alpha_ = scheme_ref.prop.alpha["cell"];
         make<double>::map_int& rho_c_ = scheme_ref.prop.rho["cell"];
         make<double>::map_int& miu_c_ = scheme_ref.prop.miu["cell"];
         make<double>::map_int& miut_ = scheme_ref.wall.miut;
@@ -1123,7 +1112,8 @@ void energy::calc_gamma(cfdscheme::scheme& const scheme_ref)
             {
                 for(Eigen::SparseMatrix<int, RowMajor>::InnerIterator it(cc_fc_, i); it; it++)
                 {
-                    Pr__ = miu_c_[it.row()] / (rho_c_[it.row()] * alpha_[it.row()]);
+                    Pr__ = miu_c_[it.row()] / (rho_c_[it.row()] * cfdsolver::calc_fluid_prop("alpha",
+                           this->value.cvalue["fluid"][it.row()], scheme_ref.pressure.cvalue["fluid"][it.row()], AH));
                     gamma_c_[it.row()] = cp_c_[it.row()] * (miu_c_[it.row()] / Pr__ + miut_[it.row()] / Pr__ );
                     break;
                 };
@@ -1171,7 +1161,7 @@ void energy::calc_gamma(cfdscheme::scheme& const scheme_ref)
         };
     };
 };
-void energy::calc_wall(cfdscheme::scheme& const scheme_ref)
+void energy::calc_wall(cfdscheme::scheme& const scheme_ref, double AH)
 {
     make<int>::vec& wall_cell_ = scheme_ref.mesh.cid["misc"]["wall"];
     make<double>::map_int& valuec_ = this->value.cvalue["fluid"];
@@ -1186,12 +1176,12 @@ void energy::calc_wall(cfdscheme::scheme& const scheme_ref)
         viu__ = scheme_ref.prop.miu["cell"][*i] / scheme_ref.prop.rho["cell"][*i];
         d_perp__ = pow(gradc__.squaredNorm() + 2*valuec__, 0.5) - gradc__.norm();
         d_plus__ = d_perp__ * u_tau__ / viu__;
-        Pr__ = viu__ / scheme_ref.prop.alpha["cell"][*i];
+        Pr__ = viu__ / cfdsolver::calc_fluid_prop("alpha", this->value.cvalue["fluid"][*i], scheme_ref.pressure.cvalue["fluid"][*i], AH);
         beta__ = pow(3.85 * pow(Pr__, 1/3), 2)  + 2.12 * std::log(Pr__);
         valuec_[*i] = 2.12 * std::log(d_plus__) + beta__;
     };
 };
-void energy::calc_lhs(cfdscheme::scheme& const scheme_ref, momentum& const u_ref, momentum& const v_ref, momentum& const w_ref)
+void energy::calc_lhs(cfdscheme::scheme& const scheme_ref, momentum& u_ref, momentum& v_ref, momentum& w_ref, double AH)
 {
     for(std::pair<std::string, make<double>::sp_mat> entry : this->lhs_cc)
     {
@@ -1249,7 +1239,7 @@ void energy::calc_lhs(cfdscheme::scheme& const scheme_ref, momentum& const u_ref
                             fc_bound = scheme_ref.mesh.bid["fluid"][row][entry_bound.first];
                             for(auto j = fc_bound.begin(); j != fc_bound.end(); j++)
                             {
-                                this->calc_bound_lhs(row, entry_bound.first, j->first, j->second, scheme_ref, "fluid", u_ref, v_ref, w_ref);
+                                this->calc_bound_lhs(row, entry_bound.first, j->first, j->second, scheme_ref, "fluid", u_ref, v_ref, w_ref, AH);
                             };
                         };
                     };
@@ -1284,7 +1274,7 @@ void energy::calc_lhs(cfdscheme::scheme& const scheme_ref, momentum& const u_ref
                             fc_bound = scheme_ref.mesh.bid["solid"][row][entry_bound.first];
                             for(auto j = fc_bound.begin(); j != fc_bound.end(); j++)
                             {
-                                this->calc_bound_lhs(row, entry_bound.first, j->first, j->second, scheme_ref, "solid", u_ref, v_ref, w_ref);
+                                this->calc_bound_lhs(row, entry_bound.first, j->first, j->second, scheme_ref, "solid", u_ref, v_ref, w_ref, AH);
                             };
                         };
                     };
@@ -1314,7 +1304,7 @@ void energy::calc_lhs(cfdscheme::scheme& const scheme_ref, momentum& const u_ref
         };
     };
 };
-void energy::calc_rhs(cfdscheme::scheme& const scheme_ref, momentum& const u_ref, momentum& const v_ref, momentum& const w_ref)
+void energy::calc_rhs(cfdscheme::scheme& const scheme_ref, momentum& u_ref, momentum& v_ref, momentum& w_ref, double AH)
 {
     for(std::pair<std::string, make<double>::sp_mat> entry : this->rhs_cc)
     {
@@ -1374,7 +1364,7 @@ void energy::calc_rhs(cfdscheme::scheme& const scheme_ref, momentum& const u_ref
                             fc_bound = scheme_ref.mesh.bid["fluid"][row][entry_bound.first];
                             for(auto j = fc_bound.begin(); j != fc_bound.end(); j++)
                             {
-                                this->calc_bound_lhs(row, entry_bound.first, j->first, j->second, scheme_ref, "fluid", u_ref, v_ref, w_ref);
+                                this->calc_bound_rhs(row, entry_bound.first, j->first, j->second, scheme_ref, "fluid", u_ref, v_ref, w_ref, AH);
                             };
                         };
                     };
@@ -1417,7 +1407,7 @@ void energy::calc_rhs(cfdscheme::scheme& const scheme_ref, momentum& const u_ref
                             fc_bound = scheme_ref.mesh.bid["solid"][row][entry_bound.first];
                             for(auto j = fc_bound.begin(); j != fc_bound.end(); j++)
                             {
-                                this->calc_bound_lhs(row, entry_bound.first, j->first, j->second, scheme_ref, "solid", u_ref, v_ref, w_ref);
+                                this->calc_bound_rhs(row, entry_bound.first, j->first, j->second, scheme_ref, "solid", u_ref, v_ref, w_ref, AH);
                             };
                         };
                     };
@@ -1436,7 +1426,7 @@ void energy::calc_rhs(cfdscheme::scheme& const scheme_ref, momentum& const u_ref
         };
     };
 };
-void energy::calc_bound_lhs(int row, int col, std::string check, int unique, cfdscheme::scheme& const scheme_ref, std::string domain__, momentum& const u_ref, momentum& const v_ref, momentum& const w_ref)
+void energy::calc_bound_lhs(int row, int col, std::string check, int unique, cfdscheme::scheme& const scheme_ref, std::string domain__, momentum& u_ref, momentum& v_ref, momentum& w_ref, double AH)
 {
     if(check.compare("temp"))
     {
@@ -1454,15 +1444,15 @@ void energy::calc_bound_lhs(int row, int col, std::string check, int unique, cfd
         double g_hamb = gamma_f_[col] * Sf_.axes_to_val(row, col) / dCf_.axes_to_val(row, col);
         double T_f__ = this->value.fvalue[domain__][col];
         double T_amb__ = scheme_ref.source.face_value["hamb"][0]; double T_sky__ = 0.0552 * pow(T_amb__, 1.5);
-        double eps_C__ = scheme_ref.prop.eps["cell"][row];
+        double eps_C__ = 0.8; // assumption for air
         double h_sky__ = 5.67 * pow(10, -8) * eps_C__ * (T_f__ + T_sky__) * (pow(T_f__, 2) + pow(T_sky__, 2)) * (T_f__ - T_sky__) / (T_f__ - T_amb__);
         // h_free_conv
         double T_film__ = (T_f__ + T_amb__) / 2;
-        double miu_film__ = cfdsolver::calc_fluid_prop("miu", T_film__, 1.01325);
-        double rho_film__ = cfdsolver::calc_fluid_prop("rho", T_film__, 1.01325);
+        double miu_film__ = cfdsolver::calc_fluid_prop("miu", T_film__, 101325, AH);
+        double rho_film__ = cfdsolver::calc_fluid_prop("rho", T_film__, 101325, AH);
         double viu_film__ = miu_film__ / rho_film__;
-        double k_film__ = cfdsolver::calc_fluid_prop("k", T_film__, 1.01325);
-        double alpha_film__ = cfdsolver::calc_fluid_prop("alpha", T_film__, 1.01325);
+        double k_film__ = cfdsolver::calc_fluid_prop("k", T_film__, 101325, AH);
+        double alpha_film__ = cfdsolver::calc_fluid_prop("alpha", T_film__, 101325, AH);
         double charl__ = pow(scheme_ref.mesh.size["area"][col], 0.5);
         double Ral__ = 9.81 * (T_f__ - T_amb__) * pow(charl__, 3) / (T_film__ * viu_film__ * alpha_film__);
         double NuN__ = 0.0;
@@ -1508,7 +1498,7 @@ void energy::calc_bound_lhs(int row, int col, std::string check, int unique, cfd
         return;
     };
 };
-void energy::calc_bound_rhs(int row, int col, std::string check, int unique, cfdscheme::scheme& const scheme_ref, std::string domain__, momentum& const u_ref, momentum& const v_ref, momentum& const w_ref)
+void energy::calc_bound_rhs(int row, int col, std::string check, int unique, cfdscheme::scheme& const scheme_ref, std::string domain__, momentum& u_ref, momentum& v_ref, momentum& w_ref, double AH)
 {
     if(check.compare("temp"))
     {
@@ -1536,15 +1526,15 @@ void energy::calc_bound_rhs(int row, int col, std::string check, int unique, cfd
         double g_hamb = gamma_f_[col] * Sf_.axes_to_val(row, col) / dCf_.axes_to_val(row, col);
         double T_f__ = this->value.fvalue[domain__][col];
         double T_amb__ = scheme_ref.source.face_value["hamb"][0]; double T_sky__ = 0.0552 * pow(T_amb__, 1.5);
-        double eps_C__ = scheme_ref.prop.eps["cell"][row];
+        double eps_C__ = 0.8; // assumption for air
         double h_sky__ = 5.67 * pow(10, -8) * eps_C__ * (T_f__ + T_sky__) * (pow(T_f__, 2) + pow(T_sky__, 2)) * (T_f__ - T_sky__) / (T_f__ - T_amb__);
         // h_free_conv
         double T_film__ = (T_f__ + T_amb__) / 2;
-        double miu_film__ = cfdsolver::calc_fluid_prop("miu", T_film__, 1.01325);
-        double rho_film__ = cfdsolver::calc_fluid_prop("rho", T_film__, 1.01325);
+        double miu_film__ = cfdsolver::calc_fluid_prop("miu", T_film__, 101325, AH);
+        double rho_film__ = cfdsolver::calc_fluid_prop("rho", T_film__, 101325, AH);
         double viu_film__ = miu_film__ / rho_film__;
-        double k_film__ = cfdsolver::calc_fluid_prop("k", T_film__, 1.01325);
-        double alpha_film__ = cfdsolver::calc_fluid_prop("alpha", T_film__, 1.01325);
+        double k_film__ = cfdsolver::calc_fluid_prop("k", T_film__, 101325, AH);
+        double alpha_film__ = cfdsolver::calc_fluid_prop("alpha", T_film__, 101325, AH);
         double charl__ = pow(scheme_ref.mesh.size["area"][col], 0.5);
         double Ral__ = 9.81 * (T_f__ - T_amb__) * pow(charl__, 3) / (T_film__ * viu_film__ * alpha_film__);
         double NuN__ = 0.0;
@@ -1621,30 +1611,29 @@ void s2s::calc_lhs(cfdscheme::scheme& scheme_ref)
         };
     };
 };
-void s2s::calc_rhs(cfdscheme::scheme& scheme_ref, energy& const energy_ref)
+void s2s::calc_rhs(cfdscheme::scheme& scheme_ref, energy& energy_ref)
 {
     make<double>::sp_mat& cc_ = this->rhs_cc["fluid"];
     make<make<int>::vec>::map_int& s2s_f_l_ = scheme_ref.mesh.fid["s2s"];
     make<double>::sp_mat& view_ = scheme_ref.mesh.constants["view"]["s2s"];
-    make<double>::map_int& eps_f_ = scheme_ref.prop.eps["face"];
+    make<double>::map_int& eps_s2s_ = scheme_ref.prop.eps["s2s"];
     make<double>::map_int& area_ = scheme_ref.mesh.size["area"];
-    double eps_f__; double T_f__; double area_clust__; make<int>::vec s2s_f_vec__;
+    double eps_s2s__; double T_f__; double area_clust__; make<int>::vec s2s_f_vec__;
     int row;
     for(int i = 0; i < cc_.outerSize(); i++)
     {
-        eps_f__ = 0.0; T_f__ = 0.0; area_clust__ = 0.0;
+        T_f__ = 0.0; area_clust__ = 0.0;
         for(Eigen::SparseMatrix<double, RowMajor>::InnerIterator it(cc_, i); it; it++)
         {
             cc_.coeffRef(it.row(), it.row()) = 1;
-            s2s_f_vec__ = s2s_f_l_[it.row()];
             for(auto j = s2s_f_vec__.begin(); j != s2s_f_vec__.end(); j++)
             {
-                eps_f__ += eps_f_[*j] * area_[*j];
                 T_f__ += energy_ref.value.fvalue["fluid"][*j] * area_[*j];
                 area_clust__ += area_[*j];
             };
-            eps_f__ = eps_f__ / area_clust__; T_f__ = T_f__ / area_clust__;
-            cc_.coeffRef(it.row(), it.col()) = eps_f__ * 5.67 * pow(10, -8) * pow(T_f__, 4);
+            eps_s2s__ = eps_s2s_[it.row()];
+            T_f__ = T_f__ / area_clust__;
+            cc_.coeffRef(it.row(), it.col()) = eps_s2s__ * 5.67 * pow(10, -8) * pow(T_f__, 4);
         };
     };
 };

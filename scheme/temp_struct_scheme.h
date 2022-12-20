@@ -52,8 +52,7 @@ class pinfo
     make<make<double>::map_int>::map_str miu; // cell-face, fluid 
     make<make<double>::map_int>::map_str cp; // cell-face, fluid
     make<make<double>::map_int>::map_str k; // cell-face, solid -> constant
-    make<make<double>::map_int>::map_str eps; // face, fluid(s2s) -> constant
-    make<make<double>::map_int>::map_str alpha; // cell, fluid -> constant
+    make<make<double>::map_int>::map_str eps; // face, solid(s2s -> glass/absorber, hamb -> glass/soil ids -> inline! (0.8)) -> constant
     pinfo() {};
     pinfo(minfo& mesh_)
     {
@@ -103,7 +102,7 @@ struct binfo
     /*energy*/
     // isotemp(temp) value (unique), environment/ambient temperature
     // isoflux(flux) value (unique), environment irr q
-    // s2s(flux) value (unique), s2s solver q
+    // s2s(flux) value (unique), s2s solver q // create inline program
     // hamb(hamb) value, ambient temperature
     make<make<double>::map_int>::map_str face_value; // boundary name-unique-constant/iter value
     make<make<double>::map_str>::map_str cell_value;
