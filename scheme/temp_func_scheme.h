@@ -1,5 +1,6 @@
 #include"temp_util.h"
 #include"temp_util_scheme.h"
+#include"temp_util_solver.h"
 #include"temp_struct_scheme.h"
 
 #ifdef SCHEMECFD_H
@@ -733,7 +734,7 @@ void minfo::make_minfo(mshio::MshSpec spec)
     };
 };
 // pinfo
-void pinfo::make_pinfo(minfo& mesh_)
+void pinfo::make_pinfo(minfo& mesh_, user& user_ref)
 {
     make<make<make<int>::vec>::map_str>::map_str& cid_ = mesh_.cid;
     make<make<double>::sp_mat>::map_str& cc_ = mesh_.cc;
@@ -748,9 +749,9 @@ void pinfo::make_pinfo(minfo& mesh_)
             {
                 for(auto i = entry_fluid.second.begin(); i != entry_fluid.second.end(); i++)
                 {
-                    rho_.insert({*i, 0.0});
-                    miu_.insert({*i, 0.0});
-                    cp_.insert({*i, 0.0});
+                    rho_.insert({*i, cfdsolver::calc_fluid_prop("rho", user_ref.P_init, user_ref.T_init, user_ref.W_init)});
+                    miu_.insert({*i, cfdsolver::calc_fluid_prop("miu", user_ref.P_init, user_ref.T_init, user_ref.W_init)});
+                    cp_.insert({*i, cfdsolver::calc_fluid_prop("cp", user_ref.P_init, user_ref.T_init, user_ref.W_init)});
                 };
             };
             this->rho["fluid"] = rho_;
@@ -764,7 +765,7 @@ void pinfo::make_pinfo(minfo& mesh_)
             {
                 for(auto i = entry_solid.second.begin(); i != entry_solid.second.end(); i++)
                 {
-                    k_.insert({*i, 0.0});
+                    k_.insert({*i, user_ref.solid_k[entry_solid.first]});
                 };
             };
             this->k["solid"] = k_;
@@ -777,7 +778,7 @@ void pinfo::make_pinfo(minfo& mesh_)
         make<double>::map_int alpha_;
         for(int i = 0; i < cc_["s2s"].rows(); i++)
         {
-            eps_.insert({i, 0.0});
+            eps_.insert({i, user_ref.s2s_eps[i]});
         };
         this->eps["s2s"] = eps_;
     };
@@ -806,7 +807,7 @@ void winfo::make_winfo(minfo& mesh_)
     };
 };
 // vinfo
-void vinfo::make_vinfo(make<std::string>::vec which, minfo& mesh_)
+void vinfo::make_vinfo(make<std::string>::vec which, minfo& mesh_, double init_value)
 {
     make<make<double>::map_int>::map_str cvalue_;
     make<make<double>::map_int>::map_str fvalue_;
@@ -823,7 +824,7 @@ void vinfo::make_vinfo(make<std::string>::vec which, minfo& mesh_)
         cgrad_.insert({*i, make<coor>::map_int()});
         for(int j = 0; j < cc_.rows(); j++)
         {
-            cvalue_[*i].insert({j, 0.0});
+            cvalue_[*i].insert({j, init_value});
             cgrad_[*i].insert({j, coor(0.0, 0.0, 0.0)});
         };
         make<double>::sp_mat& fc_ = mesh_.fc[*i];
@@ -831,7 +832,7 @@ void vinfo::make_vinfo(make<std::string>::vec which, minfo& mesh_)
         fgrad_.insert({*i, make<coor>::map_int()});
         for(int j = 0; j < fc_.cols(); j++)
         {
-            fvalue_[*i].insert({j, 0.0});
+            fvalue_[*i].insert({j, init_value});
             fgrad_[*i].insert({j, coor(0.0, 0.0, 0.0)});
         };
     };

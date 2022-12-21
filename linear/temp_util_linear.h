@@ -7,14 +7,14 @@
 namespace cfdlinear
 {
 template <class V>
-void append_template(make<std::string>::vec which, V* eq, cfdscheme::scheme& scheme_)
+void append_template(make<std::string>::vec which, V* eq, cfdscheme::scheme& scheme_, double init_value)
 {
     // refs
     minfo& mesh_ = scheme_.mesh;
     make<make<double>::sp_mat>::map_str& fc_ = mesh_.fc;
     make<make<double>::sp_mat>::map_str& cc_ = mesh_.cc;
     // iter
-    cfdscheme::vinfo value_(which, mesh_);
+    cfdscheme::vinfo value_(which, mesh_, init_value);
     make<make<double>::map_int>::map_str gamma_; // cell
     make<make<double>::sp_mat>::map_str lhs_cc_;
     make<make<double>::sp_mat>::map_str lhs_fc_;

@@ -185,7 +185,7 @@ void update_values(solver<V> solv__, cfdscheme::scheme& scheme_ref)
     };
 };
 // scphghe
-void scphghe::make_scphghe(cfdscheme::scheme& const scheme_ref, double step_length_in, double under_relax_in, int max_iter_in,
+void scphghe::make_scphghe(cfdscheme::scheme& scheme_ref, user& user_ref, double step_length_in, double under_relax_in, int max_iter_in,
                            double min_residual_in)
 {
     this->step_length = step_length_in;
@@ -199,13 +199,13 @@ void scphghe::make_scphghe(cfdscheme::scheme& const scheme_ref, double step_leng
     this->solv_v = solver(v_, scheme_ref, step_length_in);
     cfdlinear::momentum w_ = cfdlinear::momentum(scheme_ref, 2);
     this->solv_w = solver(w_, scheme_ref, step_length_in);
-    cfdlinear::pcorrect pcor_ = cfdlinear::pcorrect(scheme_ref);
+    cfdlinear::pcorrect pcor_ = cfdlinear::pcorrect(scheme_ref, user_ref);
     this->solv_pcor = solver(pcor_, scheme_ref, step_length_in);
     cfdlinear::turb_k k_turb_ = cfdlinear::turb_k(scheme_ref);
     this->solv_k = solver(k_turb_, scheme_ref, step_length_in);
     cfdlinear::turb_e e_turb_ = cfdlinear::turb_e(scheme_ref);
     this->solv_e = solver(e_turb_, scheme_ref, step_length_in);
-    cfdlinear::energy energy_ = cfdlinear::energy(scheme_ref);
+    cfdlinear::energy energy_ = cfdlinear::energy(scheme_ref, user_ref);
     this->solv_energy = solver(energy_, scheme_ref, step_length_in);
     cfdlinear::s2s s2s_ = cfdlinear::s2s(scheme_ref);
     this->solv_s2s = solver(s2s_, scheme_ref, step_length_in);
@@ -244,7 +244,7 @@ int scphghe::SIMPLE_loop(cfdscheme::scheme& scheme_ref, bool is_init)
         make_transient_lhs(this->solv_pcor, this->under_relax);
         make_transient_rhs(this->solv_pcor, this->under_relax);
         update_values(this->solv_pcor, scheme_ref);
-        this->solv_pcor.eq.update_correction(scheme_ref, u_, v_, w_);
+        pcor_.update_correction(scheme_ref, u_, v_, w_);
         // new cvalue, old lhs - rhs
         if(check_convergence(this->solv_u, this->min_residual) &&
            check_convergence(this->solv_v, this->min_residual) &&
@@ -324,6 +324,7 @@ int scphghe::energy_loop(cfdscheme::scheme& scheme_ref, double AH, bool is_init)
     cfdlinear::momentum& u_ = this->solv_u.eq;
     cfdlinear::momentum& v_ = this->solv_v.eq;
     cfdlinear::momentum& w_ = this->solv_w.eq;
+    cfdlinear::turb_k& k_ = this->solv_k.eq;
     cfdlinear::energy& energy_ = this->solv_energy.eq;
     cfdlinear::s2s& s2s_ = this->solv_s2s.eq;
     int ctrl = 0;
@@ -338,7 +339,7 @@ int scphghe::energy_loop(cfdscheme::scheme& scheme_ref, double AH, bool is_init)
         update_values(this->solv_s2s, scheme_ref);
         s2s_.update_source_s2s(scheme_ref);
         // energy
-        energy_.update_linear(scheme_ref, u_, v_, w_, AH);
+        energy_.update_linear(scheme_ref, k_, u_, v_, w_, AH);
         make_transient_lhs(this->solv_energy, this->under_relax);
         make_transient_rhs(this->solv_energy, this->under_relax);
         update_values(this->solv_energy, scheme_ref);
@@ -367,7 +368,7 @@ void scphghe::iterate(cfdscheme::scheme& scheme_ref, user& user_ref, bool is_ini
     int ctrl_iter = 0;
     int ctrl_inner = 0;
     user_ref.update_source(this->current_time, scheme_ref);
-    double AH = this->absolute_humidity;
+    double AH = user_ref.W_init;
     while(ctrl_iter < this->max_iter)
     {
         ctrl_inner += SIMPLE_loop(scheme_ref, is_init);

@@ -79,7 +79,6 @@ struct solver
 class scphghe
 {
     public:
-    double absolute_humidity;
     double step_length;
     double under_relax;
     double min_residual;
@@ -95,7 +94,7 @@ class scphghe
     solver<cfdlinear::s2s> solv_s2s;
     scphghe() {};
     private:
-    void make_scphghe(cfdscheme::scheme& const, double, double, int, double);
+    void make_scphghe(cfdscheme::scheme&, user&, double, double, int, double);
     int SIMPLE_loop(cfdscheme::scheme&, bool);
     int turb_loop(cfdscheme::scheme&, bool);
     int energy_loop(cfdscheme::scheme&, double, bool);

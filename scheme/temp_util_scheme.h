@@ -2,6 +2,7 @@
 #define SCHEMECFD_H
 
 #include"temp_util.h"
+#include"temp_struct_user.h"
 
 namespace cfdscheme
 {

@@ -1,6 +1,7 @@
 #include"temp_util.h"
 #include"temp_util_scheme.h"
 
+
 #ifdef SCHEMECFD_H
 namespace cfdscheme
 {
@@ -54,12 +55,12 @@ class pinfo
     make<make<double>::map_int>::map_str k; // cell-face, solid -> constant
     make<make<double>::map_int>::map_str eps; // face, solid(s2s -> glass/absorber, hamb -> glass/soil ids -> inline! (0.8)) -> constant
     pinfo() {};
-    pinfo(minfo& mesh_)
+    pinfo(minfo& mesh_, user& user_ref)
     {
-        this->make_pinfo(mesh_);
+        this->make_pinfo(mesh_, user_ref);
     };
     private:
-    void make_pinfo(minfo&);
+    void make_pinfo(minfo&, user&);
 };
 class winfo
 {
@@ -88,12 +89,12 @@ struct vinfo
     make<make<coor>::map_int>::map_str prev_cgrad;
     make<make<coor>::map_int>::map_str prev_fgrad;
     vinfo() {};
-    vinfo(make<std::string>::vec which, minfo& mesh_)
+    vinfo(make<std::string>::vec which, minfo& mesh_, double init_value)
     {
-        this->make_vinfo(which, mesh_);
+        this->make_vinfo(which, mesh_, init_value);
     };
     private:
-    void make_vinfo(make<std::string>::vec, minfo&);
+    void make_vinfo(make<std::string>::vec, minfo&, double);
 };
 struct binfo
 {
@@ -121,15 +122,42 @@ class scheme
     make<double>::sp_mat rho_v_sf; // fluid, fc
     make<double>::map_int phi_v; // fluid, f
     scheme() {};
-    scheme(std::string msh_file)
+    scheme(std::string msh_file, user& user_ref, double init_p_value)
     {
         mshio::MshSpec spec = mshio::load_msh(msh_file);
-        minfo mesh_(spec); pinfo prop_(mesh_); winfo wall_(mesh_);
-        vinfo pressure_(make<std::string>::vec{"fluid"}, mesh_);
+        minfo mesh_(spec); pinfo prop_(mesh_, user_ref); winfo wall_(mesh_);
+        vinfo pressure_(make<std::string>::vec{"fluid"}, mesh_, init_p_value);
+        make<make<double>::map_int>::map_str face_value__;
+        for(std::pair<std::string, make<make<double>::map_int>::map_int> entry_face1 : user_ref.face_source)
+        {
+            make<make<double>::map_int>::map_str::iterator it = face_value__.find(entry_face1.first);
+            if(it == face_value__.end())
+            {
+                face_value__.insert({entry_face1.first, make<double>::map_int()});
+            };
+            for(std::pair<int, make<double>::map_int> entry_face2 : entry_face1.second)
+            {
+                face_value__[entry_face1.first].insert({entry_face2.first, entry_face2.second[0]});                  
+            };
+        };
+        make<make<double>::map_str>::map_str cell_value__;
+        for(std::pair<std::string, make<make<double>::map_int>::map_str> entry_cell1 : user_ref.cell_source)
+        {
+            make<make<double>::map_str>::map_str::iterator it = cell_value__.find(entry_cell1.first);
+            if(it == cell_value__.end())
+            {
+                cell_value__.insert({entry_cell1.first, make<double>::map_str()});
+            };
+            for(std::pair<std::string, make<double>::map_int> entry_cell2 : entry_cell1.second)
+            {
+                cell_value__[entry_cell1.first].insert({entry_cell2.first, entry_cell2.second[0]});                  
+            };
+        };
         this->mesh = mesh_;
         this->prop = prop_;
         this->wall = wall_;
         this->pressure = pressure_;
+        this->source = binfo(face_value__, cell_value__);
     };
 };
 };
