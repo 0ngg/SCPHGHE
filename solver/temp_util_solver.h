@@ -133,7 +133,7 @@ double calc_fluid_prop(std::string what, double P, double T, double W)
     };
 };
 // scheme object update functions outside cfdscheme namespace
-void update_wall(cfdscheme::scheme& const scheme_ref, cfdlinear::momentum& const u_ref, cfdlinear::momentum& const v_ref, cfdlinear::momentum& const w_ref,
+void update_wall(cfdscheme::scheme& scheme_ref, cfdlinear::momentum& const u_ref, cfdlinear::momentum& const v_ref, cfdlinear::momentum& const w_ref,
                  cfdlinear::turb_k& const k_ref, cfdlinear::turb_e& const e_ref, cfdlinear::energy& const energy_ref)
 {
     for(std::pair<int, double> entry : scheme_ref.wall.wall_dist)
@@ -160,7 +160,7 @@ void update_wall(cfdscheme::scheme& const scheme_ref, cfdlinear::momentum& const
         scheme_ref.wall.miut[entry.first] = miut__;
     };
 };
-void update_fluid_prop(cfdscheme::scheme& const scheme_ref, cfdlinear::energy& const energy_ref, double AH)
+void update_fluid_prop(cfdscheme::scheme& scheme_ref, cfdlinear::energy& const energy_ref, double AH)
 {
     double pval__; double Tval__;
     for(std::pair<std::string, make<double>::map_int> entry_str : scheme_ref.prop.rho)
@@ -183,9 +183,44 @@ void update_fluid_prop(cfdscheme::scheme& const scheme_ref, cfdlinear::energy& c
         };
     };
 };
+void update_body_term(cfdscheme::scheme& scheme_ref, cfdlinear::momentum& const u_ref, cfdlinear::momentum& const v_ref, cfdlinear::momentum& const w_ref)
+{
+    // rho_v_sf
+    make<double>::sp_mat& rho_v_sf_ = scheme_ref.rho_v_sf;
+    make<double>::map_int& rho_f_ = scheme_ref.prop.rho["face"];
+    make<double>::map_int& u_fvalue_ = u_ref.value.fvalue["fluid"];
+    make<double>::map_int& v_fvalue_ = v_ref.value.fvalue["fluid"];
+    make<double>::map_int& w_fvalue_ = w_ref.value.fvalue["fluid"];
+    axes& Sf_ = scheme_ref.mesh.geom["Sf"]["fluid"];
+    coor Sf__;
+    for(int i = 0; i < rho_v_sf_.outerSize(); i++)
+    {
+        for(Eigen::SparseMatrix<double, RowMajor>::InnerIterator it(rho_v_sf_, i); it; it++)
+        {
+            coor v__(u_fvalue_[it.col()], v_fvalue_[it.col()], w_fvalue_[it.col()]);
+            Sf__ = Sf_.axes_to_coor(it.row(), it.col());
+            rho_v_sf_.coeffRef(it.row(), it.col()) = rho_f_[it.col()] * (v__.dot(Sf__));
+        };
+    };
+    // phi_v
+    make<double>::map_int& phi_v_ = scheme_ref.phi_v;
+    make<coor>::map_int& u_fgrad_ = u_ref.value.fgrad["fluid"];
+    make<coor>::map_int& v_fgrad_ = v_ref.value.fgrad["fluid"];
+    make<coor>::map_int& w_fgrad_ = w_ref.value.fgrad["fluid"];
+    coor u_fgrad__; coor v_fgrad__; coor w_fgrad__;
+    double phi_v__; 
+    for(std::pair<int, double> entry : phi_v_)
+    {
+        u_fgrad__ = u_fgrad_[entry.first]; v_fgrad__ = v_fgrad_[entry.first]; w_fgrad__ = w_fgrad_[entry.first]; 
+        phi_v__ = 2 * (pow(u_fgrad__[0], 2) + pow(v_fgrad__[1], 2) + pow(w_fgrad__[2], 2))
+                  + pow(u_fgrad__[1] + v_fgrad__[0], 2) + pow(u_fgrad__[2] + w_fgrad__[0], 2)
+                  + pow(v_fgrad__[2] + w_fgrad__[1], 2);
+        phi_v_[entry.first] = phi_v__;
+    };
+};
 // scphghe iteration util
 template <class V>
-bool check_convergence(V solv__, double min_res)
+double check_convergence(V solv__)
 {
     make<double>::sp_mat lhs__ = solv__.lhs;
     Eigen::VectorXf rhs__ = solv__.rhs.column(0);
@@ -205,14 +240,7 @@ bool check_convergence(V solv__, double min_res)
         res += pow(i, 2);
     };
     res = pow(res / rhs__.size(), 0.5);
-    if(res <= min_res)
-    {
-        return true;
-    }
-    else
-    {
-        return false;
-    };
+    return res;
 };
 };
 #endif

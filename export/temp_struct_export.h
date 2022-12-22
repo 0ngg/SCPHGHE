@@ -2,51 +2,70 @@
 
 #ifdef CFDEXPORT_H
 
-struct cfexport
-{
-    // cell data export
-    int id;
-    std::string name; // domain or boundary
-    // converged values
-    make<double>::vec P;
-    make<double>::vec u;
-    make<double>::vec v;
-    make<double>::vec w;
-    make<double>::vec T;
-    make<double>::vec k_turb;
-    make<double>::vec e_turb;
-};
-template <typename V>
+template <class V>
 struct compexport
 {
-    // computation report (estimated error, residuals,
-    // time at (till) converged iteration, overarching iteration
-    // until all equation converged)
-    make<V>::vec u;
-    make<V>::vec v;
-    make<V>::vec w;
-    make<V>::vec T;
-    make<V>::vec k_turb;
-    make<V>::vec e_turb;
+    typedef make<make<V>::vec>::map_str comp_str;
 };
 class export
 {
-    make<cfexport>::map_int cell_export;
-    make<cfexport>::map_int face_export;
+    public:
+    // common information
+    std::string mesh_name;
+    int number_of_cells;
+    /* map_str names: P, u, v, w, k, e, T, s2s */
+    // converged values
+    make<compexport<double>::comp_str>::map_int cell_export;
+    make<compexport<double>::comp_str>::map_int face_export;
+    /* map_str names: u, v, w, k, e, T, s2s */
     // final numerical errors (at converged iteration)
     // BiCGSTAB estimated numerical errors
-    make<compexport<double>>::map_str err_export;
+    compexport<double>::comp_str err_export;
     // converged residuals for each time step of each variable of interest
-    make<compexport<double>>::map_str res_export;
+    compexport<double>::comp_str res_export;
     // time till convergence for each time step
-    make<compexport<double>>::map_int time_export;
-    // number of overarching loops (SIMPLE-turbulence-energy) needed till all equation converged
-    make<compexport<int>>::map_int iter_export;
+    make<long long>::vec time_export;
+    // number of overarching loops (all, SIMPLE-turbulence-energy) needed till all equation converged
+    make<int>::vec iter_export;
+    export() {};
+    export(std::string filename, cfdscheme::scheme& scheme_ref)
+    {
+        this->mesh_name = filename;
+        int n_cells = 0;
+        compexport<double>::comp_str empty_err_res;
+        empty_err_res.insert({"u", make<double>::vec()});
+        empty_err_res.insert({"v", make<double>::vec()});
+        empty_err_res.insert({"w", make<double>::vec()});
+        empty_err_res.insert({"k", make<double>::vec()});
+        empty_err_res.insert({"e", make<double>::vec()});
+        empty_err_res.insert({"T", make<double>::vec()});
+        empty_err_res.insert({"s2s", make<double>::vec()});
+        empty_err_res.insert({"pcor", make<double>::vec()});
+        compexport<double>::comp_str empty_converged(empty_err_res);
+        empty_converged.insert({"P", make<double>::vec()});       
+        for(std::pair<std::string, make<make<int>::vec>::map_str> entry1 : scheme_ref.mesh.cid)
+        {
+            for(std::pair<std::string, make<int>::vec> entry2 : entry1.second)
+            {
+                for(auto i = entry2.second.begin(); i != entry2.second.end(); i++)
+                {
+                    n_cells += 1;
+                    this->cell_export.insert({*i, empty_converged});
+                    this->face_export.insert({*i, empty_converged});
+                };
+            };
+        };
+        this->number_of_cells = n_cells;
+        this->err_export = compexport<double>::comp_str(empty_err_res);
+        this->res_export = compexport<double>::comp_str(empty_err_res);
+        this->time_export = make<long long>::vec();
+        this->iter_export = make<int>::vec();
+    };
+    void update_export(cfdsolver::scphghe, cfdscheme::scheme&, make<double>::map_str,
+                       make<double>::map_str, long long, int);
+    private:
+    void export_to_sql();
+    // void export_to_vtk();
 };
-// TO DO
-// due dilligence
-// grid convergence study https://www.grc.nasa.gov/www/wind/valid/tutorial/spatconv.html
-// analytical errors (python) VARIABELNYA APA AJA YG DICARI?!
-// temporal convergence gausah wkwk
 
 #endif

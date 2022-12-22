@@ -1,5 +1,6 @@
 #include"temp_struct_solver.h"
 #include"temp_struct_user.h"
+#include"temp_struct_export.h"
 
 #ifdef SOLVERCFD_H
 namespace cfdsolver
@@ -149,20 +150,22 @@ void make_transient_rhs(solver<V> solv__, double under_relax__)
     };
 }
 template <class V>
-Eigen::VectorXf get_new_values(solver<V> solv__)
+Eigen::VectorXf get_new_values(solver<V> solv__, std::string what, make<double>::map_str* err_p__)
 {
     Eigen::BiCGSTAB<Eigen::SparseMatrix<double, RowMajor>> solver;
     make<double>::sp_mat lhs__ = solv__.lhs;
     Eigen::VectorXf rhs__ = solv__.rhs.column(0);
     solver.compute(lhs__);
     Eigen::VectorXf x = solver.solve(rhs__);
+    make<double>::map_str& err__ = *err_p__;
+    err__[what] = solver.error();
     return x;
 };
 template <class V>
-void update_values(solver<V> solv__, cfdscheme::scheme& scheme_ref)
+void update_values(solver<V> solv__, cfdscheme::scheme& scheme_ref, std::string what, make<double>::map_str* err_p__)
 {
     interpolate<double> inter;
-    Eigen::VectorXf new_cvalues__ = get_new_values(solv__);
+    Eigen::VectorXf new_cvalues__ = get_new_values(solv__, what, err_p__);
     // i.e. gradient computation
     // update cvalue -> cgrad (by iteration) -> fgrad -> fvalue
     for(std::pair<std::string, make<double>::sp_mat> entry : solv__.eq.lhs_cc)
@@ -210,7 +213,7 @@ void scphghe::make_scphghe(cfdscheme::scheme& scheme_ref, user& user_ref, double
     cfdlinear::s2s s2s_ = cfdlinear::s2s(scheme_ref);
     this->solv_s2s = solver(s2s_, scheme_ref, step_length_in);
 };
-int scphghe::SIMPLE_loop(cfdscheme::scheme& scheme_ref, bool is_init)
+int scphghe::SIMPLE_loop(cfdscheme::scheme& scheme_ref, bool is_init, make<double>::map_str* err_p__, make<double>::map_str* res_p__)
 {
     // momentum - pcorrect loop
     cfdlinear::momentum& u_ = this->solv_u.eq;
@@ -220,6 +223,7 @@ int scphghe::SIMPLE_loop(cfdscheme::scheme& scheme_ref, bool is_init)
     cfdlinear::pcorrect& pcor_ = this->solv_pcor.eq;
     int ctrl = 0;
     int passes = 0;
+    double res_u, double res_v; double res_w; double res_pcor;
     while(ctrl < this->max_iter)
     {
         passes += 1;
@@ -233,9 +237,12 @@ int scphghe::SIMPLE_loop(cfdscheme::scheme& scheme_ref, bool is_init)
         w_.update_linear(scheme_ref, k_, u_, v_);
         make_transient_lhs(this->solv_w, this->under_relax);
         make_transient_rhs(this->solv_w, this->under_relax);
-        update_values(this->solv_u, scheme_ref);
-        update_values(this->solv_v, scheme_ref);
-        update_values(this->solv_w, scheme_ref);
+        update_values(this->solv_u, scheme_ref, "u", err_p__);
+        res_u = check_convergence(this->solv_u);
+        update_values(this->solv_v, scheme_ref, "v", err_p__);
+        res_v = check_convergence(this->solv_v);
+        update_values(this->solv_w, scheme_ref, "w", err_p__);
+        res_w = check_convergence(this->solv_w);
         u_.calc_wall(scheme_ref, v_, w_);
         v_.calc_wall(scheme_ref, u_, w_);
         w_.calc_wall(scheme_ref, u_, v_);
@@ -243,12 +250,12 @@ int scphghe::SIMPLE_loop(cfdscheme::scheme& scheme_ref, bool is_init)
         pcor_.update_linear(scheme_ref, u_, v_, w_);
         make_transient_lhs(this->solv_pcor, this->under_relax);
         make_transient_rhs(this->solv_pcor, this->under_relax);
-        update_values(this->solv_pcor, scheme_ref);
+        update_values(this->solv_pcor, scheme_ref, "pcor", err_p__);
+        res_pcor = check_convergence(this->solv_pcor);
         pcor_.update_correction(scheme_ref, u_, v_, w_);
         // new cvalue, old lhs - rhs
-        if(check_convergence(this->solv_u, this->min_residual) &&
-           check_convergence(this->solv_v, this->min_residual) &&
-           check_convergence(this->solv_w, this->min_residual))
+        if(res_u <= this->min_residual && res_v <= this->min_residual &&
+           res_w <= this->min_residual && res_pcor <= this->min_residual)
         {
             if(passes < 2)
             {
@@ -260,6 +267,8 @@ int scphghe::SIMPLE_loop(cfdscheme::scheme& scheme_ref, bool is_init)
                 make_prev_rhs<cfdlinear::momentum>(this->solv_v, scheme_ref, this->step_length, is_init);
                 make_prev_rhs<cfdlinear::momentum>(this->solv_w, scheme_ref, this->step_length, is_init);
                 make_prev_rhs<cfdlinear::pcorrect>(this->solv_pcor, scheme_ref, this->step_length, is_init);
+                make<double>::map_str& res__ = *res_p__;
+                res__["u"] = res_u; res__["v"] = res_v; res__["w"] = res_w; res__["pcor"] = res_pcor;
                 return ctrl;
             }
             else
@@ -274,7 +283,7 @@ int scphghe::SIMPLE_loop(cfdscheme::scheme& scheme_ref, bool is_init)
         };
     };
 };
-int scphghe::turb_loop(cfdscheme::scheme& scheme_ref, bool is_init)
+int scphghe::turb_loop(cfdscheme::scheme& scheme_ref, bool is_init, make<double>::map_str* err_p__, make<double>::map_str* res_p__)
 {
     cfdlinear::momentum& u_ = this->solv_u.eq;
     cfdlinear::momentum& v_ = this->solv_v.eq;
@@ -283,6 +292,7 @@ int scphghe::turb_loop(cfdscheme::scheme& scheme_ref, bool is_init)
     cfdlinear::turb_e& e_ = this->solv_e.eq;
     int ctrl = 0;
     int passes = 0;
+    double res_k; double res_e;
     while (ctrl < this->max_iter)
     {
         passes += 1;
@@ -290,16 +300,17 @@ int scphghe::turb_loop(cfdscheme::scheme& scheme_ref, bool is_init)
         k_.update_linear(scheme_ref, e_, u_, v_, w_);
         make_transient_lhs(this->solv_k, this->under_relax);
         make_transient_rhs(this->solv_k, this->under_relax);
-        update_values(this->solv_k, scheme_ref);
+        update_values(this->solv_k, scheme_ref, "k", err_p__);
+        res_k = check_convergence(this->solv_k);
         k_.calc_wall(scheme_ref, e_);
         // turb_e
         e_.update_linear(scheme_ref, k_, u_, v_, w_);
         make_transient_lhs(this->solv_e, this->under_relax);
         make_transient_rhs(this->solv_e, this->under_relax);
-        update_values(this->solv_e, scheme_ref);
+        update_values(this->solv_e, scheme_ref, "e", err_p__);
+        res_e = check_convergence(this->solv_e);
         e_.calc_wall(scheme_ref);
-        if(check_convergence(this->solv_k, this->min_residual) &&
-           check_convergence(this->solv_e, this->min_residual))
+        if(res_k <= this->min_residual && res_e <= this->min_residual)
         {
             if(passes < 2)
             {
@@ -307,6 +318,8 @@ int scphghe::turb_loop(cfdscheme::scheme& scheme_ref, bool is_init)
                 make_prev_lhs<cfdlinear::turb_e>(this->solv_e, scheme_ref, this->step_length, is_init);
                 make_prev_rhs<cfdlinear::turb_k>(this->solv_k, scheme_ref, this->step_length, is_init);
                 make_prev_rhs<cfdlinear::turb_e>(this->solv_e, scheme_ref, this->step_length, is_init);
+                make<double>::map_str& res__ = *res_p__;
+                res__["k"] = res_k; res__["e"] = res_e;
                 return ctrl;
             }
             else
@@ -319,8 +332,9 @@ int scphghe::turb_loop(cfdscheme::scheme& scheme_ref, bool is_init)
         };
     };
 };
-int scphghe::energy_loop(cfdscheme::scheme& scheme_ref, double AH, bool is_init)
+int scphghe::energy_loop(cfdscheme::scheme& scheme_ref, double AH, bool is_init, make<double>::map_str* err_p__, make<double>::map_str* res_p__)
 {
+    // s2s and energy
     cfdlinear::momentum& u_ = this->solv_u.eq;
     cfdlinear::momentum& v_ = this->solv_v.eq;
     cfdlinear::momentum& w_ = this->solv_w.eq;
@@ -329,6 +343,7 @@ int scphghe::energy_loop(cfdscheme::scheme& scheme_ref, double AH, bool is_init)
     cfdlinear::s2s& s2s_ = this->solv_s2s.eq;
     int ctrl = 0;
     int passes = 0;
+    double res_s2s; double res_energy;
     while(ctrl < this->max_iter)
     {
         passes += 1;
@@ -336,22 +351,24 @@ int scphghe::energy_loop(cfdscheme::scheme& scheme_ref, double AH, bool is_init)
         s2s_.update_linear(scheme_ref, energy_);
         make_transient_lhs(this->solv_s2s, this->under_relax);
         make_transient_rhs(this->solv_s2s, this->under_relax);
-        update_values(this->solv_s2s, scheme_ref);
+        update_values(this->solv_s2s, scheme_ref, "s2s", err_p__);
+        res_s2s = check_convergence(this->solv_s2s);
         s2s_.update_source_s2s(scheme_ref);
         // energy
         energy_.update_linear(scheme_ref, k_, u_, v_, w_, AH);
         make_transient_lhs(this->solv_energy, this->under_relax);
         make_transient_rhs(this->solv_energy, this->under_relax);
-        update_values(this->solv_energy, scheme_ref);
+        update_values(this->solv_energy, scheme_ref, "T", err_p__);
+        res_energy = check_convergence(this->solv_energy);
         energy_.calc_wall(scheme_ref, AH);
-        if(check_convergence(this->solv_energy, this->min_residual) &&
-           check_convergence(this->solv_s2s, this->min_residual))
+        if(res_s2s <= this->min_residual && res_energy <= this->min_residual)
         {
             if(passes < 2)
             {
-                update_fluid_prop(scheme_ref, energy_, AH);
                 make_prev_lhs<cfdlinear::energy>(this->solv_energy, scheme_ref, this->step_length, is_init);
                 make_prev_rhs<cfdlinear::energy>(this->solv_energy, scheme_ref, this->step_length, is_init);
+                make<double>::map_str& res__ = *res_p__;
+                res__["T"] = res_energy; res__["s2s"] = res_s2s;
                 return ctrl;
             }
             else
@@ -363,25 +380,62 @@ int scphghe::energy_loop(cfdscheme::scheme& scheme_ref, double AH, bool is_init)
         };
     };
 };
-void scphghe::iterate(cfdscheme::scheme& scheme_ref, user& user_ref, bool is_init)
+void scphghe::iterate(cfdscheme::scheme& scheme_ref, export& export_ref, user& user_ref)
 {
-    int ctrl_iter = 0;
-    int ctrl_inner = 0;
+    bool is_init = false;
+    if(this->current_time == 0)
+    {
+        bool is_init = true;
+    };
+    make<double>::map_str empty__;
+    empty__.insert({"u", 0.0}); empty__.insert({"v", 0.0}); empty__.insert({"w", 0.0});
+    empty__.insert({"k", 0.0}); empty__.insert({"e", 0.0}); empty__.insert({"T", 0.0});
+    make<double>::map_str* err_p = new make<double>::map_str(empty__);
+    make<double>::map_str* res_p = new make<double>::map_str(empty__);
+    cfdlinear::momentum& u_ = this->solv_u.eq;
+    cfdlinear::momentum& v_ = this->solv_v.eq;
+    cfdlinear::momentum& w_ = this->solv_w.eq;
+    cfdlinear::turb_k& k_ = this->solv_k.eq;
+    cfdlinear::turb_e& e_ = this->solv_e.eq;
+    cfdlinear::energy& energy_ = this->solv_energy.eq;
+    int ctrl = 0;
+    int passes = 0;
     user_ref.update_source(this->current_time, scheme_ref);
     double AH = user_ref.W_init;
-    while(ctrl_iter < this->max_iter)
+    std::cout << "Start time step iteration..." << this->current_time << std::endl; 
+    while(ctrl < this->max_iter)
     {
-        ctrl_inner += SIMPLE_loop(scheme_ref, is_init);
-        ctrl_inner += turb_loop(scheme_ref, is_init);
-        ctrl_inner += energy_loop(scheme_ref, AH, is_init);
-        if(ctrl_inner < 4)
+        auto start_timer = std::chrono::high_resolution_clock::now();
+        passes += SIMPLE_loop(scheme_ref, is_init, err_p, res_p);
+        std::cout << "SIMPLE loop done. " << "[" << ctrl << "]" << std::endl;
+        passes += turb_loop(scheme_ref, is_init, err_p, res_p);
+        std::cout << "Turbulence loop done. " << "[" << ctrl << "]" << std::endl;
+        passes += energy_loop(scheme_ref, AH, is_init, err_p, res_p);
+        std::cout << "Energy loop done. " << "[" << ctrl << "]" << std::endl;
+        if(passes < 5)
         {
             // export solution at time t
+            std::cout << "Converged. " << "[" << ctrl << "]" << std::endl;
+            update_fluid_prop(scheme_ref, energy_, AH);
+            update_wall(scheme_ref, u_, v_, w_, k_, e_, energy_);
+            update_body_term(scheme_ref, u_, v_, w_);
             this->current_time += 1;
+            // update export
+            auto stop_timer = std::chrono::high_resolution_clock::now();
+            auto duration = std::chrono::duration_cast<milli>(stop_timer - start_timer);
+            long long time__ = duration.count();
+            std::cout << "Exporting time step... " << this->current_time << "exec. time: " << time__ << " ms" << std::endl;
+            // export_ref.update_export(*this, scheme_ref, *err_p, *res_p, time__, ctrl);
+            break;
         }
         else
         {
-            ctrl_iter += 1;
+            std::cout << "Updating scheme... " << "[" << ctrl << "]" << std::endl;
+            update_fluid_prop(scheme_ref, energy_, AH);
+            update_wall(scheme_ref, u_, v_, w_, k_, e_, energy_);
+            update_body_term(scheme_ref, u_, v_, w_);
+            passes = 0;
+            ctrl += 1;
         };
     };
 };

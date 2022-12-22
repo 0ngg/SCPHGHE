@@ -1398,16 +1398,18 @@ void energy::calc_rhs(cfdscheme::scheme& const scheme_ref, momentum u_ref, momen
                         };
                     };
                 };
+                // append total
                 for(Eigen::SparseMatrix<double, RowMajor>::InnerIterator it(fc_, i); it; it++)
                 {
                     row = it.row();
                     bC += fc_.coeffRef(it.row(), it.col());
                 };
+                // body term (fluid only)
                 double miu_c__ = scheme_ref.prop.miu["cell"][row];
                 double miut__ = scheme_ref.wall.miut[row];
                 double phi_v__ = scheme_ref.phi_v[row];
                 double vol__ = vol_[row];
-                cc_.coeffRef(row, row) = bC + ((miu_c__ + miut__) * phi_v__ * vol__)/sizeof(this->rhs_cc);
+                cc_.coeffRef(row, row) = bC + ((miu_c__ + miut__) * phi_v__ * vol__);
             }
             else if(entry.first.compare("solid") == 0)
             {
@@ -1441,16 +1443,20 @@ void energy::calc_rhs(cfdscheme::scheme& const scheme_ref, momentum u_ref, momen
                         };
                     };
                 };
+                // append total
                 for(Eigen::SparseMatrix<double, RowMajor>::InnerIterator it(fc_, i); it; it++)
                 {
                     row = it.row();
                     bC += fc_.coeffRef(it.row(), it.col());
                 };
-                double miu_c__ = scheme_ref.prop.miu["cell"][row];
-                double miut__ = scheme_ref.wall.miut[row];
-                double phi_v__ = scheme_ref.phi_v[row];
-                double vol__ = vol_[row];
-                cc_.coeffRef(row, row) = bC + ((miu_c__ + miut__) * phi_v__ * vol__)/sizeof(this->rhs_cc); 
+                // soil source
+                make<int>::vec soil_id = scheme_ref.mesh.cid["solid"]["soil"];
+                if(std::find(soil_id.begin(), soil_id.end(), row) != soil_id.end())
+                {
+                    double vol__ = vol_[row];
+                    bC += scheme_ref.source.cell_value["solid"]["soil"] * vol__;
+                };
+                cc_.coeffRef(row, row) = bC;
             };
         };
     };

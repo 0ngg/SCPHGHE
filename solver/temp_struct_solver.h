@@ -93,12 +93,16 @@ class scphghe
     solver<cfdlinear::energy> solv_energy;
     solver<cfdlinear::s2s> solv_s2s;
     scphghe() {};
+    scphghe operator=(scphghe* self)
+    {
+        return *this;
+    };
     private:
     void make_scphghe(cfdscheme::scheme&, user&, double, double, int, double);
-    int SIMPLE_loop(cfdscheme::scheme&, bool);
-    int turb_loop(cfdscheme::scheme&, bool);
-    int energy_loop(cfdscheme::scheme&, double, bool);
-    void iterate(cfdscheme::scheme&, user&, bool);
+    int SIMPLE_loop(cfdscheme::scheme&, bool, make<double>::map_str*, make<double>::map_str*);
+    int turb_loop(cfdscheme::scheme&, bool, make<double>::map_str*, make<double>::map_str*);
+    int energy_loop(cfdscheme::scheme&, double, bool, make<double>::map_str*, make<double>::map_str*);
+    void iterate(cfdscheme::scheme&, export&, user&);
 };
 };
 #endif
