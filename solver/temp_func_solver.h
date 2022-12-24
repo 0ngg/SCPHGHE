@@ -422,9 +422,9 @@ void scphghe::iterate(cfdscheme::scheme& scheme_ref, exports& export_ref, user& 
             this->current_time += 1;
             // update export
             auto stop_timer = std::chrono::high_resolution_clock::now();
-            auto duration = std::chrono::duration_cast<milli>(stop_timer - start_timer);
+            auto duration = std::chrono::duration_cast<sec>(stop_timer - start_timer);
             long long time__ = duration.count();
-            std::cout << "Exporting time step... " << this->current_time << "exec. time: " << time__ << " ms" << std::endl;
+            std::cout << "Exporting time step... " << this->current_time << "exec. time: " << time__ << " s" << std::endl;
             // export_ref.update_export(*this, scheme_ref, *err_p, *res_p, time__, ctrl);
             break;
         }
