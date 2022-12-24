@@ -25,7 +25,7 @@ using namespace Eigen;
 std::unique_ptr<bool> is_true(new bool(true));
 std::unique_ptr<bool> is_false(new bool(false));
 std::unique_ptr<double> pi(new double(4*std::atan(1.0)));
-typedef std::chrono::milliseconds milli;
+typedef std::chrono::seconds sec;
 typedef Eigen::Vector3d coor;
 typedef Eigen::Triplet<double> sparse_input;
 template<typename U>
