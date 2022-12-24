@@ -7,17 +7,18 @@ struct compexport
 {
     typedef make<make<V>::vec>::map_str comp_str;
 };
-class export
+class exports
 {
     public:
     // common information
+    std::string output_name;
     std::string mesh_name;
     int number_of_cells;
-    /* map_str names: P, u, v, w, k, e, T, s2s */
+    /* map_str names: P, u, v, w, k, e, T*/
     // converged values
     make<compexport<double>::comp_str>::map_int cell_export;
     make<compexport<double>::comp_str>::map_int face_export;
-    /* map_str names: u, v, w, k, e, T, s2s */
+    /* map_str names: u, v, w, k, e, T*/
     // final numerical errors (at converged iteration)
     // BiCGSTAB estimated numerical errors
     compexport<double>::comp_str err_export;
@@ -27,10 +28,11 @@ class export
     make<long long>::vec time_export;
     // number of overarching loops (all, SIMPLE-turbulence-energy) needed till all equation converged
     make<int>::vec iter_export;
-    export() {};
-    export(std::string filename, cfdscheme::scheme& scheme_ref)
+    exports() {};
+    exports(std::string outputname, std::string meshname, cfdscheme::scheme& scheme_ref)
     {
-        this->mesh_name = filename;
+        this->output_name = outputname;
+        this->mesh_name = meshname;
         int n_cells = 0;
         compexport<double>::comp_str empty_err_res;
         empty_err_res.insert({"u", make<double>::vec()});
@@ -39,8 +41,6 @@ class export
         empty_err_res.insert({"k", make<double>::vec()});
         empty_err_res.insert({"e", make<double>::vec()});
         empty_err_res.insert({"T", make<double>::vec()});
-        empty_err_res.insert({"s2s", make<double>::vec()});
-        empty_err_res.insert({"pcor", make<double>::vec()});
         compexport<double>::comp_str empty_converged(empty_err_res);
         empty_converged.insert({"P", make<double>::vec()});       
         for(std::pair<std::string, make<make<int>::vec>::map_str> entry1 : scheme_ref.mesh.cid)
@@ -64,8 +64,7 @@ class export
     void update_export(cfdsolver::scphghe, cfdscheme::scheme&, make<double>::map_str,
                        make<double>::map_str, long long, int);
     private:
-    void export_to_sql();
-    // void export_to_vtk();
+    void export_to_sql(cfdscheme::scheme& scheme_ref);
 };
 
 #endif

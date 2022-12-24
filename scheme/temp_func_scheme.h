@@ -722,6 +722,9 @@ void minfo::make_minfo(mshio::MshSpec spec)
             return;
         };
     };
+    this->nodes = nodes;
+    this->faces = faces;
+    this->cells = cells;
     this->make_id(spec, cells);
     this->make_template(nodes, faces, cells);
     this->make_size(nodes, faces, cells);

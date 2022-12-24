@@ -18,6 +18,7 @@
 #include<Eigen/Core>
 #include<Eigen/Sparse>
 #include"HumidAirProp.h"
+#include"sqlite3.h"
 
 using namespace Eigen;
 

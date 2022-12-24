@@ -188,8 +188,8 @@ void update_values(solver<V> solv__, cfdscheme::scheme& scheme_ref, std::string 
     };
 };
 // scphghe
-void scphghe::make_scphghe(cfdscheme::scheme& scheme_ref, user& user_ref, double step_length_in, double under_relax_in, int max_iter_in,
-                           double min_residual_in)
+void scphghe::make_scphghe(cfdscheme::scheme& scheme_ref, user& user_ref, double step_length_in, double under_relax_in,
+                           double min_residual_in, int max_iter_in)
 {
     this->step_length = step_length_in;
     this->under_relax = under_relax_in;
@@ -380,7 +380,7 @@ int scphghe::energy_loop(cfdscheme::scheme& scheme_ref, double AH, bool is_init,
         };
     };
 };
-void scphghe::iterate(cfdscheme::scheme& scheme_ref, export& export_ref, user& user_ref)
+void scphghe::iterate(cfdscheme::scheme& scheme_ref, exports& export_ref, user& user_ref)
 {
     bool is_init = false;
     if(this->current_time == 0)

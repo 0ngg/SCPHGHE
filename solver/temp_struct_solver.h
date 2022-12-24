@@ -97,12 +97,17 @@ class scphghe
     {
         return *this;
     };
+    scphghe(cfdscheme::scheme& scheme_ref, user& user_ref, double step_length_in, double under_relax_in,
+            double min_residual_in, int max_iter_in)
+    {
+        this->make_scphghe(scheme_ref, user_ref, step_length_in, under_relax_in, min_residual_in, max_iter_in);
+    };
+    void iterate(cfdscheme::scheme&, exports&, user&);
     private:
-    void make_scphghe(cfdscheme::scheme&, user&, double, double, int, double);
+    void make_scphghe(cfdscheme::scheme&, user&, double, double, double, int);
     int SIMPLE_loop(cfdscheme::scheme&, bool, make<double>::map_str*, make<double>::map_str*);
     int turb_loop(cfdscheme::scheme&, bool, make<double>::map_str*, make<double>::map_str*);
     int energy_loop(cfdscheme::scheme&, double, bool, make<double>::map_str*, make<double>::map_str*);
-    void iterate(cfdscheme::scheme&, export&, user&);
 };
 };
 #endif

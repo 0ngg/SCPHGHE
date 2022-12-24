@@ -23,6 +23,9 @@ struct cinfo
 class minfo
 {  
     public:
+    make<coor>::map_int nodes;
+    make<finfo>::map_int faces;
+    make<cinfo>::map_int cells;
     make<make<axes>::map_str>::map_str geom; // Sf, Ef, Tf, eCf, eCF, dCf, dCF, parallel = -Sf.norm() from fluid perspective
     make<make<double>::map_int>::map_str size; // area, volume
     make<make<make<int>::vec>::map_int>::map_str fid; // store common (ns, inlet, outlet, conj) index 0, temp, flux, and s2s index unique id
@@ -122,11 +125,11 @@ class scheme
     make<double>::sp_mat rho_v_sf; // fluid, fc
     make<double>::map_int phi_v; // fluid, f
     scheme() {};
-    scheme(std::string msh_file, user& user_ref, double init_p_value)
+    scheme(std::string msh_file, user& user_ref)
     {
         mshio::MshSpec spec = mshio::load_msh(msh_file);
         minfo mesh_(spec); pinfo prop_(mesh_, user_ref); winfo wall_(mesh_);
-        vinfo pressure_(make<std::string>::vec{"fluid"}, mesh_, init_p_value);
+        vinfo pressure_(make<std::string>::vec{"fluid"}, mesh_, user_ref.P_init);
         make<make<double>::map_int>::map_str face_value__;
         for(std::pair<std::string, make<make<double>::map_int>::map_int> entry_face1 : user_ref.face_source)
         {
